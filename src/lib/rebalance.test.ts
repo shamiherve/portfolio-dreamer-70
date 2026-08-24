@@ -31,10 +31,9 @@ describe("computeRebalance", () => {
   });
 
   it("calcule correctement l'injection minimale", () => {
-    // contrainte : total final >= max(v_i / w_i) = 12500 / 0.25 = 50000
+    // total final >= max(v_i / w_i) = 45200 / 0.40 = 113000 ; total actuel = 90500
     const r = computeRebalance(cats, 0);
-    expect(r.minInjection).toBeCloseTo(50000 - 90500, 6);
-    expect(r.minInjection).toBe(0); // portefeuille déjà couvert par A (45200/0.4=113000)
+    expect(r.minInjection).toBeCloseTo(113000 - 90500, 6);
   });
 
   it("atteint exactement les cibles avec l'injection minimale", () => {
