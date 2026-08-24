@@ -16,7 +16,7 @@ export type AllocationLine = {
   injected: number;
   deltaPp: number; // finalWeight - currentWeight
   gapToTargetPp: number; // finalWeight - target
-  impossible: boolean; // current weight already above target -> needs a sale
+  impossible: boolean; // cible 0 % avec une valeur > 0 : inatteignable sans vente
 };
 
 export type RebalanceResult = {
@@ -98,8 +98,8 @@ export function computeRebalance(categories: Category[], budget: number): Rebala
       injected,
       deltaPp: finalWeight - currentWeight,
       gapToTargetPp: finalWeight - (c.target || 0),
-      impossible:
-        total > 0 && value > 0 && currentWeight - (c.target || 0) > 1e-9,
+      // Impossible sans vente : cible 0 % alors que la catégorie a déjà de la valeur.
+      impossible: (c.target || 0) <= 0 && value > 0,
     };
   });
 
@@ -115,9 +115,7 @@ export function computeRebalance(categories: Category[], budget: number): Rebala
     ? Math.max(0, requiredTotal - total)
     : Infinity;
 
-  const impossibleWithoutSale = !Number.isFinite(minInjection)
-    ? true
-    : lines.some((l) => l.impossible);
+  const impossibleWithoutSale = lines.some((l) => l.impossible);
 
   const shortfall = Number.isFinite(minInjection)
     ? Math.max(0, minInjection - safeBudget)
