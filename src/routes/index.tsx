@@ -54,6 +54,47 @@ function Index() {
     ...result.lines.map((l) => Math.max(l.currentWeight, l.finalWeight)),
   );
 
+  const { simulations, save, rename, remove: removeSim } = useSimulations();
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const [simName, setSimName] = useState("Simulation 1");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+
+  const flash = (msg: string) => {
+    setStatus(msg);
+    window.setTimeout(() => setStatus(null), 2500);
+  };
+
+  const saveCurrent = (asNew: boolean) => {
+    const entry = save({
+      ...(asNew || !currentId ? {} : { id: currentId }),
+      name: simName,
+      categories,
+      budget: budgetInput,
+    });
+    setCurrentId(entry.id);
+    setSimName(entry.name);
+    flash(asNew || !currentId ? "Simulation enregistrée" : "Simulation mise à jour");
+  };
+
+  const load = (sim: Simulation) => {
+    setCategories(sim.categories);
+    setBudgetInput(sim.budget);
+    setCurrentId(sim.id);
+    setSimName(sim.name);
+    flash(`« ${sim.name} » chargée`);
+  };
+
+  const startNew = () => {
+    setCategories([{ id: uid(), name: "Nouvelle catégorie", value: 0, target: 100 }]);
+    setBudgetInput("0");
+    setCurrentId(null);
+    setSimName(`Simulation ${simulations.length + 1}`);
+    flash("Nouvelle simulation");
+  };
+
+
   return (
     <div className="min-h-screen bg-background text-foreground antialiased">
       <nav className="sticky top-0 z-50 border-b border-border bg-surface/70 backdrop-blur-sm">
