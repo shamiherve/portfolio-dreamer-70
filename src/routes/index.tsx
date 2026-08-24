@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { computeRebalance, eur, pct, pp, type Category } from "@/lib/rebalance";
+import { formatDate, useSimulations, type Simulation } from "@/lib/simulations";
 
 export const Route = createFileRoute("/")({
   head: () => ({
