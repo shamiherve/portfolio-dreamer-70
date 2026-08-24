@@ -16,6 +16,7 @@ export type AllocationLine = {
   injected: number;
   deltaPp: number; // finalWeight - currentWeight
   gapToTargetPp: number; // finalWeight - target
+  impossible: boolean; // current weight already above target -> needs a sale
 };
 
 export type RebalanceResult = {
@@ -27,6 +28,11 @@ export type RebalanceResult = {
   targetSum: number;
   targetsValid: boolean;
   maxGapPp: number;
+  /** Montant manquant pour atteindre exactement les cibles (0 si budget suffisant). */
+  shortfall: number;
+  /** true si au moins une catégorie dépasse déjà sa cible (vente nécessaire). */
+  impossibleWithoutSale: boolean;
+  status: "reached" | "partial" | "impossible";
 };
 
 /**
@@ -92,6 +98,8 @@ export function computeRebalance(categories: Category[], budget: number): Rebala
       injected,
       deltaPp: finalWeight - currentWeight,
       gapToTargetPp: finalWeight - (c.target || 0),
+      impossible:
+        total > 0 && value > 0 && currentWeight - (c.target || 0) > 1e-9,
     };
   });
 
@@ -107,7 +115,23 @@ export function computeRebalance(categories: Category[], budget: number): Rebala
     ? Math.max(0, requiredTotal - total)
     : Infinity;
 
+  const impossibleWithoutSale = !Number.isFinite(minInjection)
+    ? true
+    : lines.some((l) => l.impossible);
+
+  const shortfall = Number.isFinite(minInjection)
+    ? Math.max(0, minInjection - safeBudget)
+    : Infinity;
+
   const maxGapPp = lines.reduce((m, l) => Math.max(m, Math.abs(l.gapToTargetPp)), 0);
+
+  const status: RebalanceResult["status"] = !targetsValid
+    ? "partial"
+    : impossibleWithoutSale
+      ? "impossible"
+      : maxGapPp < 0.05
+        ? "reached"
+        : "partial";
 
   return {
     total,
@@ -118,6 +142,9 @@ export function computeRebalance(categories: Category[], budget: number): Rebala
     targetSum,
     targetsValid,
     maxGapPp,
+    shortfall,
+    impossibleWithoutSale,
+    status,
   };
 }
 
@@ -129,3 +156,13 @@ export const eur = (n: number) =>
 export const pct = (n: number) => `${n.toFixed(1)} %`;
 
 export const pp = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(1)} pp`;
+
+/**
+ * Mode « Atteindre la cible » : simulation à l'injection minimale exacte.
+ * Ne modifie pas la logique de calcul, réutilise computeRebalance.
+ */
+export function computeExactTarget(categories: Category[]): RebalanceResult {
+  const base = computeRebalance(categories, 0);
+  const min = Number.isFinite(base.minInjection) ? base.minInjection : 0;
+  return computeRebalance(categories, min);
+}
