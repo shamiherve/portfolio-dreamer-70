@@ -37,33 +37,30 @@ export type RebalanceResult = {
 function allocate(values: number[], weights: number[], budget: number): number[] {
   const n = values.length;
   if (n === 0) return [];
-  const active = weights.map((w) => w > 0);
-  // Breakpoints lambda_i = v_i / w_i where category i starts receiving money.
-  const breakpoints = values
-    .map((v, i) => (active[i] ? v / weights[i] : Infinity))
-    .filter((x) => Number.isFinite(x))
+
+  const pairs = values.map((v, i) => ({ v, w: weights[i] ?? 0 }));
+
+  const breakpoints = pairs
+    .filter((p) => p.w > 0)
+    .map((p) => p.v / p.w)
     .sort((a, b) => a - b);
 
   const need = (lambda: number) =>
-    values.reduce(
-      (acc, v, i) => acc + (active[i] ? Math.max(0, lambda * weights[i] - v) : 0),
-      0,
-    );
+    pairs.reduce((acc, p) => acc + (p.w > 0 ? Math.max(0, lambda * p.w - p.v) : 0), 0);
 
-  // Find the segment where need(lambda) crosses budget.
-  let lo = breakpoints.length ? breakpoints[0] : 0;
+  let lo = breakpoints.length > 0 ? (breakpoints[0] as number) : 0;
   for (const bp of breakpoints) {
     if (need(bp) >= budget) break;
     lo = bp;
   }
-  // On the segment starting at lo, need is linear: slope = sum of active weights.
-  const slope = values.reduce(
-    (acc, v, i) => acc + (active[i] && lo * weights[i] - v >= 0 ? weights[i] : 0),
+
+  const slope = pairs.reduce(
+    (acc, p) => acc + (p.w > 0 && lo * p.w - p.v >= 0 ? p.w : 0),
     0,
   );
   const lambda = slope > 0 ? lo + (budget - need(lo)) / slope : lo;
 
-  return values.map((v, i) => (active[i] ? Math.max(0, lambda * weights[i] - v) : 0));
+  return pairs.map((p) => (p.w > 0 ? Math.max(0, lambda * p.w - p.v) : 0));
 }
 
 export function computeRebalance(categories: Category[], budget: number): RebalanceResult {
@@ -79,18 +76,20 @@ export function computeRebalance(categories: Category[], budget: number): Rebala
   const finalTotal = total + safeBudget;
 
   const lines: AllocationLine[] = categories.map((c, i) => {
-    const currentWeight = total > 0 ? (values[i] / total) * 100 : 0;
-    const finalValue = values[i] + injections[i];
+    const value = values[i] ?? 0;
+    const injected = injections[i] ?? 0;
+    const currentWeight = total > 0 ? (value / total) * 100 : 0;
+    const finalValue = value + injected;
     const finalWeight = finalTotal > 0 ? (finalValue / finalTotal) * 100 : 0;
     return {
       id: c.id,
       name: c.name,
-      value: values[i],
+      value,
       target: c.target || 0,
       currentWeight,
       finalValue,
       finalWeight,
-      injected: injections[i],
+      injected,
       deltaPp: finalWeight - currentWeight,
       gapToTargetPp: finalWeight - (c.target || 0),
     };
@@ -98,15 +97,28 @@ export function computeRebalance(categories: Category[], budget: number): Rebala
 
   // Minimal injection to hit targets exactly without selling:
   // final total must be at least max(v_i / w_i).
-  const requiredTotal = categories.reduce((max, c, i) => {
-    if (weights[i] <= 0) return values[i] > 0 ? Infinity : max;
-    return Math.max(max, values[i] / weights[i]);
+  const requiredTotal = categories.reduce((max, _c, i) => {
+    const w = weights[i] ?? 0;
+    const v = values[i] ?? 0;
+    if (w <= 0) return v > 0 ? Infinity : max;
+    return Math.max(max, v / w);
   }, 0);
-  const minInjection = Number.isFinite(requiredTotal) ? Math.max(0, requiredTotal - total) : Infinity;
+  const minInjection = Number.isFinite(requiredTotal)
+    ? Math.max(0, requiredTotal - total)
+    : Infinity;
 
   const maxGapPp = lines.reduce((m, l) => Math.max(m, Math.abs(l.gapToTargetPp)), 0);
 
-  return { total, finalTotal, budget: safeBudget, lines, minInjection, targetSum, targetsValid, maxGapPp };
+  return {
+    total,
+    finalTotal,
+    budget: safeBudget,
+    lines,
+    minInjection,
+    targetSum,
+    targetsValid,
+    maxGapPp,
+  };
 }
 
 export const eur = (n: number) =>
