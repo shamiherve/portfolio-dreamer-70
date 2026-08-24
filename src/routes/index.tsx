@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { computeRebalance, eur, pct, pp, type Category } from "@/lib/rebalance";
+import {
+  computeExactTarget,
+  computeRebalance,
+  eur,
+  pct,
+  pp,
+  type Category,
+  type RebalanceResult,
+} from "@/lib/rebalance";
 import { formatDate, useSimulations, type Simulation } from "@/lib/simulations";
 
 export const Route = createFileRoute("/")({
@@ -37,9 +45,13 @@ const initial: Category[] = [
 function Index() {
   const [categories, setCategories] = useState<Category[]>(initial);
   const [budgetInput, setBudgetInput] = useState("15000");
+  const [mode, setMode] = useState<"target" | "budget">("budget");
 
   const budget = Number(budgetInput.replace(/\s/g, "").replace(",", ".")) || 0;
-  const result = useMemo(() => computeRebalance(categories, budget), [categories, budget]);
+  const result = useMemo(
+    () => (mode === "target" ? computeExactTarget(categories) : computeRebalance(categories, budget)),
+    [categories, budget, mode],
+  );
 
   const update = (id: string, patch: Partial<Category>) =>
     setCategories((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -305,45 +317,77 @@ function Index() {
                 </div>
               </div>
 
-              <div className="space-y-5">
+              <div className="space-y-6">
+                <div className="flex flex-wrap gap-4 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-3 rounded-sm bg-border" />Actuel
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-3 rounded-sm bg-accent" />Après injection
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-3 rounded-sm bg-foreground/70" />Cible
+                  </span>
+                </div>
+
                 {result.lines.map((line) => (
                   <div key={line.id} className="space-y-2">
                     <div className="flex flex-wrap items-end justify-between gap-1 text-xs">
                       <span className="font-medium">{line.name}</span>
                       <span className="text-muted-foreground">
                         {pct(line.currentWeight)} →{" "}
-                        <span className="text-foreground">{pct(line.finalWeight)}</span>{" "}
-                        <span
-                          className={`font-mono ${
-                            Math.abs(line.gapToTargetPp) < 0.05 ? "text-success" : "text-muted-foreground"
-                          }`}
-                        >
-                          ({pp(line.deltaPp)})
-                        </span>
+                        <span className="text-foreground">{pct(line.finalWeight)}</span> →{" "}
+                        <span className="font-mono">{pct(line.target)}</span>
                       </span>
                     </div>
-                    <div className="relative h-2 w-full overflow-hidden rounded-full bg-surface-muted">
-                      <div
-                        className="absolute left-0 top-0 h-full bg-border transition-all duration-500"
-                        style={{ width: `${(line.currentWeight / maxScale) * 100}%` }}
-                      />
-                      <div
-                        className="absolute left-0 top-0 h-full bg-accent transition-all duration-500"
-                        style={{ width: `${(line.finalWeight / maxScale) * 100}%` }}
-                      />
-                      <div
-                        className="absolute top-0 h-full w-px bg-foreground/60"
-                        style={{ left: `${(line.target / maxScale) * 100}%` }}
-                      />
+                    <div className="space-y-1">
+                      {[
+                        { label: "Actuel", w: line.currentWeight, cls: "bg-border" },
+                        { label: "Après", w: line.finalWeight, cls: "bg-accent" },
+                        { label: "Cible", w: line.target, cls: "bg-foreground/70" },
+                      ].map((bar) => (
+                        <div key={bar.label} className="flex items-center gap-2">
+                          <span className="w-12 shrink-0 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                            {bar.label}
+                          </span>
+                          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-muted">
+                            <div
+                              className={`h-full rounded-full ${bar.cls} transition-all duration-500`}
+                              style={{ width: `${Math.min(100, (bar.w / maxScale) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex justify-between font-mono text-[10px] text-muted-foreground">
+                    <div className="flex flex-wrap justify-between gap-2 font-mono text-[10px] text-muted-foreground">
                       <span>Injecter : {eur(line.injected)}</span>
-                      <span>
-                        Cible {line.target.toFixed(1)} % · écart {pp(line.gapToTargetPp)}
+                      <span
+                        className={
+                          line.impossible
+                            ? "text-destructive"
+                            : Math.abs(line.gapToTargetPp) < 0.05
+                              ? "text-success"
+                              : ""
+                        }
+                      >
+                        {line.impossible
+                          ? "Vente requise (cible 0 %)"
+                          : `Écart restant ${pp(line.gapToTargetPp)}`}
                       </span>
                     </div>
                   </div>
                 ))}
+
+                <div className="flex items-center justify-between border-t border-border pt-4 text-xs">
+                  <span className="text-muted-foreground">Écart maximal du portefeuille</span>
+                  <span
+                    className={`font-mono text-sm ${
+                      result.maxGapPp < 0.05 ? "text-success" : "text-foreground"
+                    }`}
+                  >
+                    {result.maxGapPp.toFixed(2)} pp
+                  </span>
+                </div>
               </div>
             </div>
 
