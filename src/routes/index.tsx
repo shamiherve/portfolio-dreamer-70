@@ -379,6 +379,141 @@ function Index() {
                 Appliquer ce budget →
               </button>
             </div>
+
+            <div className="space-y-4 rounded-xl bg-surface p-6 ring-1 ring-border">
+              <div className="flex items-center justify-between border-b border-border pb-4">
+                <h2 className="text-sm font-semibold">Simulations sauvegardées</h2>
+                <button
+                  onClick={startNew}
+                  className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  + Nouvelle
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="sim-name"
+                  className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+                >
+                  Nom de la simulation en cours
+                </label>
+                <input
+                  id="sim-name"
+                  value={simName}
+                  maxLength={80}
+                  onChange={(e) => setSimName(e.target.value)}
+                  className="w-full rounded bg-surface-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    onClick={() => saveCurrent(false)}
+                    className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                  >
+                    {currentId ? "Mettre à jour" : "Sauvegarder"}
+                  </button>
+                  {currentId && (
+                    <button
+                      onClick={() => saveCurrent(true)}
+                      className="rounded bg-surface-muted px-3 py-1.5 text-xs font-medium transition-colors hover:bg-border"
+                    >
+                      Sauvegarder comme nouvelle
+                    </button>
+                  )}
+                </div>
+                {status && (
+                  <p role="status" className="font-mono text-[11px] text-success">
+                    {status}
+                  </p>
+                )}
+              </div>
+
+              <ul className="divide-y divide-border border-t border-border">
+                {simulations.length === 0 && (
+                  <li className="py-4 text-xs text-muted-foreground">
+                    Aucune simulation sauvegardée pour l'instant.
+                  </li>
+                )}
+                {simulations.map((sim) => (
+                  <li key={sim.id} className="flex items-center gap-2 py-3">
+                    {renamingId === sim.id ? (
+                      <>
+                        <input
+                          aria-label="Nouveau nom"
+                          autoFocus
+                          value={renameValue}
+                          maxLength={80}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              rename(sim.id, renameValue);
+                              if (currentId === sim.id) setSimName(renameValue.trim() || sim.name);
+                              setRenamingId(null);
+                            }
+                            if (e.key === "Escape") setRenamingId(null);
+                          }}
+                          className="min-w-0 flex-1 rounded bg-surface-muted px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-ring"
+                        />
+                        <button
+                          onClick={() => {
+                            rename(sim.id, renameValue);
+                            if (currentId === sim.id) setSimName(renameValue.trim() || sim.name);
+                            setRenamingId(null);
+                          }}
+                          className="font-mono text-[11px] uppercase text-success"
+                        >
+                          OK
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => load(sim)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span
+                            className={`block truncate text-sm ${
+                              currentId === sim.id ? "font-semibold" : "font-medium"
+                            }`}
+                          >
+                            {sim.name}
+                          </span>
+                          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                            {formatDate(sim.savedAt)} · {sim.categories.length} cat.
+                          </span>
+                        </button>
+                        <button
+                          aria-label={`Renommer ${sim.name}`}
+                          onClick={() => {
+                            setRenamingId(sim.id);
+                            setRenameValue(sim.name);
+                          }}
+                          className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          Renommer
+                        </button>
+                        <button
+                          aria-label={`Supprimer ${sim.name}`}
+                          onClick={() => {
+                            removeSim(sim.id);
+                            if (currentId === sim.id) setCurrentId(null);
+                          }}
+                          className="text-border transition-colors hover:text-destructive"
+                        >
+                          <svg className="size-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path
+                              fillRule="evenodd"
+                              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </aside>
         </div>
       </main>
