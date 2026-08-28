@@ -277,36 +277,109 @@ function Index() {
               </div>
             </div>
 
-            <div className="flex flex-col items-start gap-6 rounded-xl bg-primary p-6 text-primary-foreground sm:flex-row sm:items-center sm:justify-between">
-              <div className="w-full space-y-1 sm:w-auto">
-                <label
-                  htmlFor="budget"
-                  className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-foreground/60"
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 rounded-lg bg-surface-muted p-1 ring-1 ring-border">
+                <button
+                  onClick={() => switchMode("target")}
+                  className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                    mode === "target"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
                 >
-                  Budget d'injection
-                </label>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-light text-primary-foreground/50">€</span>
-                  <input
-                    id="budget"
-                    inputMode="decimal"
-                    value={budgetInput}
-                    onChange={(e) => setBudgetInput(e.target.value)}
-                    placeholder="0"
-                    className="w-full border-none bg-transparent p-0 font-mono text-3xl font-medium outline-none placeholder:text-primary-foreground/25 sm:w-48"
-                  />
+                  Atteindre la cible
+                </button>
+                <button
+                  onClick={() => switchMode("budget")}
+                  className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                    mode === "budget"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Injecter un budget
+                </button>
+              </div>
+
+              {mode === "target" ? (
+                <div className="flex flex-col items-start gap-6 rounded-xl bg-primary p-6 text-primary-foreground sm:flex-row sm:items-center sm:justify-between">
+                  <div className="w-full space-y-1 sm:w-auto">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-foreground/60">
+                      Injection minimale requise
+                    </span>
+                    <div className="font-mono text-3xl font-medium">{eur(result.minInjection)}</div>
+                    <p className="font-mono text-[11px] text-primary-foreground/60">
+                      Montant total nécessaire pour aligner exactement vos poids cibles sans vente.
+                    </p>
+                  </div>
+                  <div className="font-mono text-[11px] uppercase tracking-wider text-primary-foreground/50">
+                    Alignement parfait · aucune vente
+                  </div>
                 </div>
-              </div>
-              <div className="font-mono text-[11px] uppercase tracking-wider text-primary-foreground/50">
-                Calcul en temps réel · aucune vente
-              </div>
+              ) : (
+                <div className="rounded-xl bg-primary p-6 text-primary-foreground">
+                  <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="w-full space-y-1 sm:w-auto">
+                      <label
+                        htmlFor="budget"
+                        className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-foreground/60"
+                      >
+                        Budget d'injection
+                      </label>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-light text-primary-foreground/50">€</span>
+                        <input
+                          id="budget"
+                          inputMode="decimal"
+                          value={budgetInput}
+                          onChange={(e) => setBudgetInput(e.target.value)}
+                          placeholder="0"
+                          className="w-full border-none bg-transparent p-0 font-mono text-3xl font-medium outline-none placeholder:text-primary-foreground/25 sm:w-48"
+                        />
+                      </div>
+                    </div>
+                    <div className="font-mono text-[11px] uppercase tracking-wider text-primary-foreground/50">
+                      Calcul en temps réel · aucune vente
+                    </div>
+                  </div>
+                  {result.shortfall > 0 && (
+                    <p className="mt-4 border-t border-primary-foreground/10 pt-3 font-mono text-xs text-primary-foreground/70">
+                      Il manque encore {eur(result.shortfall)} pour atteindre exactement vos objectifs.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
           <aside className="col-span-12 space-y-6 lg:sticky lg:top-24 lg:col-span-5">
             <div className="space-y-6 rounded-xl bg-surface p-6 ring-1 ring-border">
-              <div className="border-b border-border pb-4">
+              <div className="flex items-center justify-between border-b border-border pb-4">
                 <h2 className="text-sm font-semibold">Synthèse du rééquilibrage</h2>
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider ${
+                    result.status === "reached"
+                      ? "bg-success/10 text-success"
+                      : result.status === "partial"
+                        ? "bg-warning/10 text-warning"
+                        : "bg-destructive/10 text-destructive"
+                  }`}
+                >
+                  <span
+                    className={`size-1.5 rounded-full ${
+                      result.status === "reached"
+                        ? "bg-success"
+                        : result.status === "partial"
+                          ? "bg-warning"
+                          : "bg-destructive"
+                    }`}
+                  />
+                  {result.status === "reached"
+                    ? "Cibles atteintes"
+                    : result.status === "partial"
+                      ? "Partiel"
+                      : "Impossible sans vente"}
+                </span>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
