@@ -81,11 +81,15 @@ function Index() {
   };
 
   const saveCurrent = (asNew: boolean) => {
+    const budgetToSave =
+      mode === "target" && Number.isFinite(result.minInjection)
+        ? String(Math.ceil(result.minInjection))
+        : budgetInput;
     const entry = save({
       ...(asNew || !currentId ? {} : { id: currentId }),
       name: simName,
       categories,
-      budget: budgetInput,
+      budget: budgetToSave,
     });
     setCurrentId(entry.id);
     setSimName(entry.name);
