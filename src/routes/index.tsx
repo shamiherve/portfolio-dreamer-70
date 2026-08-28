@@ -53,12 +53,7 @@ function Index() {
     [categories, budget, mode],
   );
 
-  const switchMode = (next: "target" | "budget") => {
-    setMode(next);
-    if (next === "target" && Number.isFinite(result.minInjection)) {
-      setBudgetInput(String(Math.ceil(result.minInjection)));
-    }
-  };
+  const switchMode = (next: "target" | "budget") => setMode(next);
 
   const update = (id: string, patch: Partial<Category>) =>
     setCategories((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
