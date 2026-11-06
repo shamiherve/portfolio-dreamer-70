@@ -16,7 +16,7 @@ export function evaluatePurchases(positions: Position[], units: number[], budget
     if (!Number.isSafeInteger(q) || q < 0 || !p || (q > 0 && (!p.price || p.target === 0))) throw new Error('Les achats doivent être des parts entières, avec un cours et une cible positive.');
     return s + q * (p.price ?? 0);
   }, 0);
-  if (spent > budget + 1e-8) throw new Error('Ces achats dépassent le budget disponible.');
+  if (!Number.isFinite(spent) || spent > budget + 1e-8) throw new Error('Ces achats dépassent le budget disponible.');
   const total = positions.reduce((s, p) => s + p.quantity * (p.price ?? 0), 0);
   const finalTotal = total + spent;
   const lines = positions.map((p, i) => {
@@ -37,7 +37,7 @@ export function evaluatePurchases(positions: Position[], units: number[], budget
  * The continuous engine is used only to initialize the separate integer search. */
 export function wholeUnitProposal(positions: Position[], budget: number, mode: 'budget' | 'target') {
   const continuous = computeRebalance(asCategories(positions), budget);
-  const valid = validTargets(positions.map(p => p.target)) && positions.every(p => p.price !== null || (p.quantity === 0 && p.target === 0));
+  const valid = validTargets(positions.map(p => p.target)) && positions.every(p => (p.price !== null && p.price > 0 && p.priceDate !== null) || (p.quantity === 0 && p.target === 0));
   const theoreticalMinimum = continuous.minInjection;
   const priceSum = positions.reduce((s, p) => s + (p.target > 0 ? p.price ?? 0 : 0), 0);
   // Mode A has an explicit finite search envelope; never promise an unbounded integer optimum.

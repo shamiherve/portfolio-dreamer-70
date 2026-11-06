@@ -92,3 +92,20 @@
     color: var(--color-foreground);
   }
 }
+
+meter {
+  appearance: none;
+  background: var(--surface-muted);
+  border-radius: 2px;
+  --meter-fill: var(--accent);
+}
+meter::-webkit-meter-bar { background: var(--surface-muted); border: 0; border-radius: 2px; }
+meter::-webkit-meter-optimum-value { background: var(--meter-fill); }
+meter::-moz-meter-bar { background: var(--meter-fill); }
+meter[data-allocation="current"] { --meter-fill: var(--border); }
+meter[data-allocation="target"] { --meter-fill: var(--foreground); }
+meter.bg-border { --meter-fill: var(--border); }
+meter.bg-foreground { --meter-fill: var(--foreground); }
+@media (prefers-reduced-motion: reduce) {
+  meter { transition: none; }
+}

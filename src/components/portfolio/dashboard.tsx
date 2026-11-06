@@ -6,6 +6,7 @@ import { usePortfolio } from "@/lib/use-portfolio";
 import { exportBackup, makeId, parseBackup, purchaseProposal, recordTransaction, SIMULATIONS_KEY, type Backup, type Position } from "@/lib/portfolio";
 import { eur, pct, pp } from "@/lib/rebalance";
 import { downloadJson } from "./target-editor";
+import { PurchasePlanner } from "./purchase-planner";
 
 const field = "w-full rounded-md border border-input bg-surface px-2 py-2 text-sm outline-none focus:ring-1 focus:ring-ring";
 const nonnegative = (s: string) => Math.max(0, Number(s) || 0);
@@ -45,8 +46,7 @@ export function Dashboard() {
   const [transactionQuantity, setTransactionQuantity] = useState("");
   const [transactionPrice, setTransactionPrice] = useState("");
   const [transactionDate, setTransactionDate] = useState("");
-  const status = !proposal.valid ? "Données à compléter" : result.impossibleWithoutSale ? "Objectif impossible sans vente" : proposal.maxGap < 0.05 ? "Objectif atteint" : "Objectif partiellement atteint";
-  const statusClass = !proposal.valid ? "text-muted-foreground" : result.impossibleWithoutSale ? "text-destructive" : proposal.maxGap < 0.05 ? "text-success" : "text-warning";
+  const currentMaxGap = Math.max(0, ...result.lines.map((line) => Math.abs(line.currentWeight - line.target)));
   const active = portfolio.targets.find((t) => t.id === portfolio.activeTargetId);
   const run = (fn: () => void, success?: string) => {
     try { fn(); if (success) setMessage(success); }
@@ -72,7 +72,7 @@ export function Dashboard() {
       <div><p className="text-xs text-muted-foreground">Valeur totale des positions</p><p className="mt-2 font-mono text-2xl">{proposal.missingValuation ? "Incomplète" : eur(result.total)}</p>{proposal.missingValuation && <p className="mt-1 text-xs text-warning">Valeur connue : {eur(result.total)}</p>}</div>
       <div><p className="text-xs text-muted-foreground">Prochain versement</p><label className="mt-2 flex items-center gap-2"><input aria-label="Montant du prochain versement" type="number" min="0" step="any" disabled={!hydrated} value={portfolio.budget} onChange={(e) => run(() => commit({ ...portfolio, budget: nonnegative(e.target.value) }))} className="w-full max-w-44 rounded-md border border-input bg-surface px-2 py-1 font-mono text-xl outline-none focus:ring-1 focus:ring-ring" /><span className="text-muted-foreground">€</span></label></div>
       <div><p className="text-xs text-muted-foreground">Dernière actualisation manuelle</p><p className="mt-2 text-sm">{portfolio.updatedAt ? new Date(portfolio.updatedAt).toLocaleString("fr-FR") : "Aucune donnée enregistrée"}</p><p className="mt-1 text-[11px] text-muted-foreground">Les dates des cours figurent ci-dessous.</p></div>
-      <div><p className="text-xs text-muted-foreground">Écart maximal après investissement</p><p className={`mt-2 font-mono text-2xl ${statusClass}`}>{proposal.valid ? `${proposal.maxGap.toFixed(2)} pp` : "—"}</p><p className={`mt-1 text-xs ${statusClass}`}>● {status}</p></div>
+      <div><p className="text-xs text-muted-foreground">Écart maximal actuel</p><p className="mt-2 font-mono text-2xl">{proposal.valid ? `${currentMaxGap.toFixed(2)} pp` : "—"}</p><p className="mt-1 text-xs text-muted-foreground">Hors liquidités · Avant les achats proposés</p></div>
     </section>
     <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-base font-semibold">Positions détenues</h2><Button disabled={!hydrated} variant="outline" size="sm" onClick={() => run(() => {
       const p: Position = { id: makeId(), name: "Nouvel ETF", isin: "", quantity: 0, price: null, priceDate: null, target: 0 };
@@ -87,22 +87,7 @@ export function Dashboard() {
     <div className="flex flex-wrap justify-between gap-3 text-xs"><span className={result.targetsValid ? "text-success" : "text-warning"}>Total des cibles : {result.targetSum.toFixed(2)} %{!result.targetsValid && " · Pondérations à renseigner"}</span><Button asChild size="sm" variant="link" className="h-auto p-0"><Link to="/targets">Modifier les pondérations cibles<ArrowUpRight /></Link></Button></div>
     {active && <p className="text-xs text-muted-foreground">Cibles du {active.date} · Source : {active.source}</p>}
     </section>
-    <section className="grid gap-8 border-t border-border pt-7 lg:grid-cols-2">
-      <div className="space-y-5"><h2 className="font-semibold">Actuel → Après injection → Cible</h2><div className="flex flex-wrap gap-4 text-[11px] text-muted-foreground"><span className="flex items-center gap-2"><span className="h-2 w-4 bg-border" />Actuel</span><span className="flex items-center gap-2"><span className="h-2 w-4 bg-accent" />Après</span><span className="flex items-center gap-2"><span className="h-2 w-4 bg-foreground" />Cible</span></div>
-        {portfolio.positions.map((p, i) => <div key={p.id} className="space-y-2"><p className="text-xs font-medium">{p.name}</p>{[{ label: "Actuel", value: proposal.missingValuation ? null : result.lines[i]?.currentWeight ?? 0, cls: "bg-border" }, { label: "Après", value: proposal.valid ? proposal.lines[i]?.finalWeight ?? 0 : null, cls: "bg-accent" }, { label: "Cible", value: p.target, cls: "bg-foreground" }].map((bar) => <div key={bar.label} className="flex items-center gap-3"><span className="w-10 shrink-0 text-[10px] text-muted-foreground">{bar.label}</span><meter aria-label={`${bar.label} ${p.name}`} min="0" max="100" value={bar.value ?? 0} className={`allocation-meter ${bar.cls} h-2 min-w-0 flex-1`} /><span className="w-14 shrink-0 text-right font-mono text-[11px]">{bar.value === null ? "—" : pct(bar.value)}</span></div>)}</div>)}
-      </div>
-      <div className="space-y-5"><div className="flex flex-wrap justify-between gap-2"><h2 className="font-semibold">Proposition d’achat sans vente</h2><span className={`text-xs ${statusClass}`}>{status}</span></div>
-        <p className="text-xs text-muted-foreground">{proposal.wholeShares ? "Parts entières · optimisation arrondie de la répartition théorique" : "Montants théoriques fractionnaires : cours manquants pour acheter des parts entières."}</p>
-        {!proposal.valid ? <p className="border-l-2 border-warning pl-3 text-sm text-warning">{proposal.missingValuation ? "Renseignez les cours des positions détenues pour valoriser le portefeuille." : "Validez des pondérations totalisant 100 % pour obtenir une proposition."}</p> : <>
-        <div className="divide-y divide-border">{proposal.lines.map((l) => <div key={l.id} className="space-y-2 py-4"><div className="flex flex-wrap justify-between gap-2 text-sm"><span>{l.name}</span><span className="font-mono">{eur(l.injected)}</span></div><div className="flex flex-wrap justify-between gap-2 font-mono text-[11px] text-muted-foreground"><span>{l.shares === null ? "Fractionnaire théorique" : `${l.shares} part${l.shares > 1 ? "s" : ""}`} · Après : {pct(l.finalWeight)}</span><span>Écart : {pp(l.gapToTargetPp)}</span></div></div>)}</div>
-        <div className="grid grid-cols-2 gap-4 border-t border-border pt-4"><div><p className="text-xs text-muted-foreground">Montant investi</p><p className="mt-1 font-mono">{eur(proposal.spent)}</p></div><div><p className="text-xs text-muted-foreground">Liquidités restantes</p><p className="mt-1 font-mono">{eur(proposal.cash)}</p></div><div><p className="text-xs text-muted-foreground">Valeur finale des positions</p><p className="mt-1 font-mono">{eur(result.total + proposal.spent)}</p></div><div><p className="text-xs text-muted-foreground">Injection minimale théorique</p><p className="mt-1 font-mono">{eur(result.minInjection)}</p></div></div>
-        <p className="text-[11px] text-muted-foreground">Poids calculés hors liquidités. L’alignement exact est théorique et peut être impossible avec des parts entières.</p>
-        {Number.isFinite(result.shortfall) && result.shortfall > 0 && <p className="text-xs text-warning">Il manque encore {eur(result.shortfall)} pour atteindre exactement vos objectifs (calcul théorique sans vente).</p>}
-        {result.impossibleWithoutSale && <p className="text-xs text-destructive">Une position détenue a une cible de 0 % : l’objectif exact est impossible sans vente.</p>}
-        </>}
-        <p className="text-xs text-muted-foreground">Proposition uniquement : aucun ordre ni aucune transaction ne sont exécutés.</p>
-      </div>
-    </section>
+    {hydrated && <PurchasePlanner portfolio={portfolio} />}
     <section className="space-y-5 border-t border-border pt-7"><h2 className="font-semibold">Historique des transactions</h2>
       <form className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-6" onSubmit={(e) => { e.preventDefault(); run(() => {
         const p = portfolio.positions.find((i) => i.id === transactionPosition); if (!p) throw new Error("Choisissez un ETF.");

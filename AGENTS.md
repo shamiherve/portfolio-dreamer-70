@@ -13,3 +13,4 @@
 - Keep the original generic simulation workbench separate from the ETF dashboard; both reuse the unchanged rebalance engine to preserve existing behavior.
 - Validate versioned portfolio backups before replacing any local data; persist only after hydration to prevent SSR overwrites.
 - External quote/reference adapters are browser-safe interfaces with no configured provider; manual records are the only active data source.
+- Keep whole-unit search and editable purchase evaluation in a separate planner module; dashboard summaries use current holdings so proposed purchases never change saved positions or the theoretical engine.
