@@ -52,6 +52,7 @@
 }
 
 :root {
+  color-scheme: light;
   --radius: 0.625rem;
   --font-body: "Inter", system-ui, sans-serif;
   --font-numeric: "JetBrains Mono", ui-monospace, monospace;
@@ -79,6 +80,33 @@
   --border: oklch(0.92 0.004 286.3);
   --input: oklch(0.92 0.004 286.3);
   --ring: oklch(0.6 0.104 183.3);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.16 0.004 286);
+  --foreground: oklch(0.94 0.004 286);
+  --surface: oklch(0.205 0.006 286);
+  --surface-muted: oklch(0.25 0.006 286);
+  --card: oklch(0.205 0.006 286);
+  --card-foreground: oklch(0.94 0.004 286);
+  --popover: oklch(0.205 0.006 286);
+  --popover-foreground: oklch(0.94 0.004 286);
+  --primary: oklch(0.94 0.004 286);
+  --primary-foreground: oklch(0.16 0.004 286);
+  --secondary: oklch(0.28 0.006 286);
+  --secondary-foreground: oklch(0.94 0.004 286);
+  --muted: oklch(0.25 0.006 286);
+  --muted-foreground: oklch(0.73 0.01 286);
+  --accent: oklch(0.74 0.11 183.3);
+  --accent-foreground: oklch(0.16 0.004 286);
+  --success: oklch(0.75 0.14 163.2);
+  --warning: oklch(0.8 0.14 75);
+  --destructive: oklch(0.73 0.17 27.325);
+  --destructive-foreground: oklch(0.16 0.004 286);
+  --border: oklch(0.34 0.008 286);
+  --input: oklch(0.4 0.008 286);
+  --ring: oklch(0.74 0.11 183.3);
 }
 
 
