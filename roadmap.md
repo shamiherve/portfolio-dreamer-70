@@ -1,6 +1,9 @@
 # ETF dashboard finalization
+- [ ] Confirm an accessible free-only scheduler and quote-cache host before implementing Euronext automatic/manual refresh; preserve browser-held portfolios. Blocked until free infrastructure access and quota suitability are verified.
+- [ ] Implement and test Paris ETF ZIP/CSV ingestion, ISIN matching, EUR-only valid trades, failure preservation, quote history, and separate refresh/trade timestamps after infrastructure confirmation.
+- [ ] Configure and verify the 18:30 Europe/Paris daily schedule, including weekends, holidays and daylight saving, without paid services.
 - [x] Finalize the existing whole-unit planner integration and verify both modes, edits, rejection, scores, backups and simulations.
-- [x] Keep dated manual EUR quotes; the user declined a market-data subscription. No provider or Cloud connection is planned.
+- [x] Keep dated manual EUR quotes without a market-data subscription; the later free Euronext request is tracked above.
 - [x] Extend ETF recommendations with two whole-unit buy-only modes, editable/rejectable purchases, transparent equilibrium scores and complete before/after results; preserve existing data and simulations.
 - [x] Preserve existing simulations and no-sale engine.
 - [x] Add editable ETF positions, overview and whole-share purchase proposals.
