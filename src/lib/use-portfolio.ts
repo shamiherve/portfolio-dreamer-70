@@ -1,23 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { initialPortfolio, portfolioSchema, PORTFOLIO_KEY, SIMULATIONS_KEY, type Portfolio, type Backup } from "./portfolio";
 
 export function usePortfolio() {
   const [portfolio, setPortfolio] = useState<Portfolio>(initialPortfolio);
   const [hydrated, setHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const current = useRef(portfolio);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(PORTFOLIO_KEY);
-      if (raw) setPortfolio(portfolioSchema.parse(JSON.parse(raw)));
+      if (raw) { const checked = portfolioSchema.parse(JSON.parse(raw)); current.current = checked; setPortfolio(checked); }
     } catch { setError("Les données locales ne peuvent pas être lues. Elles n’ont pas été remplacées. Importez une sauvegarde valide."); }
     setHydrated(true);
   }, []);
-  function commit(next: Portfolio) {
+  function commit(next: Portfolio | ((current: Portfolio) => Portfolio)) {
     if (!hydrated) throw new Error("Chargement en cours.");
-    const checked = portfolioSchema.parse(next);
+    const checked = portfolioSchema.parse(typeof next === "function" ? next(current.current) : next);
     try { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(checked)); }
     catch { throw new Error("Enregistrement impossible dans ce navigateur. Exportez votre sauvegarde."); }
-    setPortfolio(checked); setError(null);
+    current.current = checked; setPortfolio(checked); setError(null);
   }
   function restore(backup: Backup) {
     const oldPortfolio = localStorage.getItem(PORTFOLIO_KEY);
@@ -32,7 +33,7 @@ export function usePortfolio() {
       } catch { /* Keep original in-memory state and report failed storage. */ }
       throw new Error("La sauvegarde n’a pas pu être enregistrée.");
     }
-    setPortfolio(backup.portfolio); setError(null);
+    current.current = backup.portfolio; setPortfolio(backup.portfolio); setError(null);
   }
   return { portfolio, hydrated, error, commit, restore };
 }

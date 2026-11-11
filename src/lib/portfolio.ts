@@ -16,6 +16,9 @@ export const simulationsSchema = z.array(simulationSchema).refine(uniqueIds);
 const positionSchema = z.object({
   id: z.string().min(1), name: z.string().min(1), isin: z.string(), quantity: amount,
   price: amount.positive().nullable(), priceDate: date.nullable(), target: amount.max(100),
+  tradeTimestamp: z.string().datetime().nullable().optional(),
+  quoteUpdatedAt: z.string().datetime().nullable().optional(),
+  priceSource: z.enum(["manual", "euronext"]).optional(),
 }).refine((p) => p.price === null ? p.priceDate === null : p.priceDate !== null, "Un cours nécessite une date");
 const weightSchema = z.object({ id: z.string().min(1), name: z.string(), weight: amount.max(100) });
 export const targetSchema = z.object({
@@ -26,6 +29,9 @@ export const portfolioSchema = z.object({
   positions: z.array(positionSchema).refine(uniqueIds), budget: amount,
   updatedAt: z.string().datetime().nullable(), targets: z.array(targetSchema).refine(uniqueIds),
   activeTargetId: z.string().nullable(),
+  feedUpdatedAt: z.string().datetime().nullable().optional(),
+  quotesCheckedAt: z.string().datetime().nullable().optional(),
+  quoteHistory: z.array(z.object({ isin: z.string(), price: amount.positive(), currency: z.literal("EUR"), tradeTimestamp: z.string().datetime(), updateTimestamp: z.string().datetime() })).optional(),
   transactions: z.array(z.object({ id: z.string().min(1), positionId: z.string(), name: z.string(), type: z.enum(["buy", "sell"]), quantity: amount.positive(), price: amount.positive(), date })).refine(uniqueIds),
 }).superRefine((p, ctx) => {
   if (p.activeTargetId === null) return;

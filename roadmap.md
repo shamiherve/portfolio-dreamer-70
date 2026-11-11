@@ -2,7 +2,7 @@
 - [x] Create the separate public shamiherve/euronext-etf-quotes repository and free GitHub Actions/Pages pipeline; publish no holdings or app code.
 - [x] Test all four configured ETF ISINs, EUR-only valid trades, conservative modification/non-price filters, failure preservation and separate timestamps: 19 tests pass; live GitHub run succeeds and public JSON is browser-readable.
 - [x] Configure dual UTC schedules targeting 18:30 Europe/Paris with DST gating, weekend/verified 2026–2027 holiday skips; real scheduled timing remains best-effort and is not yet observed.
-- [ ] Integrate the verified public feed, manual refresh and quote history into the existing local-only app only after the user authorizes the next stage; current request explicitly excludes app changes.
+- [x] Integrate the authorized public feed on load, manual refresh, separate timestamps and quote history without changing holdings, targets or browser storage architecture; 40 tests pass and browser checks verify all four live quotes, real held-position values, whole-unit purchases, offline preservation, EUR rejection, manual override, reload, themes and mobile layout.
 - [x] Finalize the existing whole-unit planner integration and verify both modes, edits, rejection, scores, backups and simulations.
 - [x] Keep dated manual EUR quotes without a market-data subscription; the later free Euronext request is tracked above.
 - [x] Extend ETF recommendations with two whole-unit buy-only modes, editable/rejectable purchases, transparent equilibrium scores and complete before/after results; preserve existing data and simulations.

@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Download, Upload, ArrowUpRight, Save } from "lucide-react";
+import { Plus, Trash2, Download, Upload, ArrowUpRight, Save, RefreshCw } from "lucide-react";
 import { usePortfolio } from "@/lib/use-portfolio";
+import { useQuotes } from "@/lib/use-quotes";
 import { exportBackup, makeId, parseBackup, purchaseProposal, recordTransaction, SIMULATIONS_KEY, type Backup, type Position } from "@/lib/portfolio";
 import { eur, pct, pp } from "@/lib/rebalance";
 import { downloadJson } from "./target-editor";
@@ -10,6 +11,7 @@ import { PurchasePlanner } from "./purchase-planner";
 
 const field = "w-full rounded-md border border-input bg-surface px-2 py-2 text-sm outline-none focus:ring-1 focus:ring-ring";
 const nonnegative = (s: string) => Math.max(0, Number(s) || 0);
+const timestamp = (s: string | null | undefined) => s ? new Date(s).toLocaleString("fr-FR", { timeZone: "Europe/Paris" }) : "Aucune";
 
 function PositionForm({ position, onSave, onCancel }: { position: Position; onSave: (p: Position) => void; onCancel: () => void }) {
   const [draft, setDraft] = useState(position);
@@ -38,6 +40,7 @@ export function Dashboard() {
   const [editing, setEditing] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState<Backup | null>(null);
+  const quotes = useQuotes(hydrated && !error, editing !== null || pending !== null, commit);
   const file = useRef<HTMLInputElement>(null);
   const proposal = purchaseProposal(portfolio.positions, portfolio.budget);
   const result = proposal.continuous;
@@ -54,7 +57,8 @@ export function Dashboard() {
   };
   const edit = portfolio.positions.find((p) => p.id === editing);
   return <main className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6">
-    <header className="flex flex-wrap items-start justify-between gap-4"><div className="space-y-2"><p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">PEA · Approximation MSCI ACWI</p><h1 className="text-2xl font-semibold">Mon portefeuille ETF</h1><p className="text-xs text-muted-foreground">Actualisation automatique non configurée</p></div><div className="flex flex-wrap gap-2">
+    <header className="flex flex-wrap items-start justify-between gap-4"><div className="space-y-2"><p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">PEA · Approximation MSCI ACWI</p><h1 className="text-2xl font-semibold">Mon portefeuille ETF</h1><p className="text-xs text-muted-foreground">Euronext · Dernières transactions différées en EUR · Heure de Paris</p></div><div className="flex flex-wrap gap-2">
+      <Button size="sm" variant="outline" disabled={!hydrated || Boolean(error) || quotes.loading || editing !== null || pending !== null} onClick={() => void quotes.refresh()}><RefreshCw className={quotes.loading ? "animate-spin motion-reduce:animate-none" : ""} />{quotes.loading ? "Actualisation…" : "Actualiser les cours"}</Button>
       <Button size="sm" variant="outline" disabled={!hydrated} onClick={() => run(() => downloadJson(exportBackup(portfolio, JSON.parse(localStorage.getItem(SIMULATIONS_KEY) ?? "[]")), "equilibre-sauvegarde.json"), "Sauvegarde exportée.")}><Download />Exporter la sauvegarde</Button>
       <Button size="sm" variant="outline" disabled={!hydrated} onClick={() => file.current?.click()}><Upload />Importer une sauvegarde</Button>
       <input ref={file} aria-label="Importer une sauvegarde" type="file" className="hidden" accept=".json,application/json" onChange={async (e) => {
@@ -66,12 +70,13 @@ export function Dashboard() {
     <p className="border-l-2 border-warning pl-3 text-xs text-muted-foreground">Données conservées dans ce navigateur uniquement. Exportez régulièrement une sauvegarde ; effacer les données du navigateur les supprimera.</p>
     {!hydrated && <p role="status" className="text-sm text-muted-foreground">Chargement des données locales…</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {quotes.status && <p role={quotes.failed ? "alert" : "status"} className={`text-sm ${quotes.failed ? "text-warning" : "text-muted-foreground"}`}>{quotes.status}</p>}
     {message && <p role="status" className="text-sm text-muted-foreground">{message}</p>}
     {pending && <section role="dialog" aria-label="Confirmer le remplacement des données" className="space-y-3 rounded-md border border-border bg-surface p-5"><h2 className="font-semibold">Remplacer les données existantes ?</h2><p className="text-sm text-muted-foreground">Cette sauvegarde remplacera les positions, cibles, transactions et simulations de ce navigateur ({pending.portfolio.positions.length} positions, {pending.simulations.length} simulations). Exportez d’abord vos données actuelles si nécessaire.</p><div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => run(() => { restore(pending); setPending(null); setEditing(null); }, "Sauvegarde importée.")}>Confirmer le remplacement</Button><Button size="sm" variant="outline" onClick={() => setPending(null)}>Annuler</Button></div></section>}
     <section className="grid gap-6 border-y border-border py-6 sm:grid-cols-2 lg:grid-cols-4">
       <div><p className="text-xs text-muted-foreground">Valeur totale des positions</p><p className="mt-2 font-mono text-2xl">{proposal.missingValuation ? "Incomplète" : eur(result.total)}</p>{proposal.missingValuation && <p className="mt-1 text-xs text-warning">Valeur connue : {eur(result.total)}</p>}</div>
       <div><p className="text-xs text-muted-foreground">Prochain versement</p><label className="mt-2 flex items-center gap-2"><input aria-label="Montant du prochain versement" type="number" min="0" step="any" disabled={!hydrated} value={portfolio.budget} onChange={(e) => run(() => commit({ ...portfolio, budget: nonnegative(e.target.value) }))} className="w-full max-w-44 rounded-md border border-input bg-surface px-2 py-1 font-mono text-xl outline-none focus:ring-1 focus:ring-ring" /><span className="text-muted-foreground">€</span></label></div>
-      <div><p className="text-xs text-muted-foreground">Dernière actualisation manuelle</p><p className="mt-2 text-sm">{portfolio.updatedAt ? new Date(portfolio.updatedAt).toLocaleString("fr-FR") : "Aucune donnée enregistrée"}</p><p className="mt-1 text-[11px] text-muted-foreground">Les dates des cours figurent ci-dessous.</p></div>
+      <div><p className="text-xs text-muted-foreground">Dernière mise à jour du flux réussie</p><p className="mt-2 text-sm">{timestamp(portfolio.feedUpdatedAt)}</p><p className="mt-1 text-[11px] text-muted-foreground">Dernière lecture réussie : {timestamp(portfolio.quotesCheckedAt)}</p><p className="mt-1 text-[11px] text-muted-foreground">Dernière modification du portefeuille : {timestamp(portfolio.updatedAt)}</p></div>
       <div><p className="text-xs text-muted-foreground">Écart maximal actuel</p><p className="mt-2 font-mono text-2xl">{proposal.valid ? `${currentMaxGap.toFixed(2)} pp` : "—"}</p><p className="mt-1 text-xs text-muted-foreground">Hors liquidités · Avant les achats proposés</p></div>
     </section>
     <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-base font-semibold">Positions détenues</h2><Button disabled={!hydrated} variant="outline" size="sm" onClick={() => run(() => {
@@ -83,7 +88,9 @@ export function Dashboard() {
         if (window.confirm(`Supprimer ${p.name} des positions ? Son historique de transactions sera conservé.`)) run(() => commit({ ...portfolio, positions: portfolio.positions.filter((pos) => pos.id !== p.id), activeTargetId: null, updatedAt: new Date().toISOString() }));
       }}><Trash2 className="text-muted-foreground" /></Button></td></tr>; })}
     </tbody></table></div>
-    {edit && <PositionForm key={edit.id} position={edit} onCancel={() => setEditing(null)} onSave={(p) => { commit({ ...portfolio, positions: portfolio.positions.map((pos) => pos.id === p.id ? p : pos), updatedAt: new Date().toISOString() }); setEditing(null); setMessage("Position enregistrée."); }} />}
+    {edit && <PositionForm key={edit.id} position={edit} onCancel={() => setEditing(null)} onSave={(p) => { const changedPrice = p.price !== edit.price || p.priceDate !== edit.priceDate; const changedIsin = p.isin !== edit.isin; commit(current => ({ ...current, positions: current.positions.map((pos) => pos.id === p.id ? { ...p, ...(changedPrice || changedIsin ? { priceSource: "manual" as const, quoteUpdatedAt: null, tradeTimestamp: changedIsin ? null : pos.tradeTimestamp } : { price: pos.price, priceDate: pos.priceDate, tradeTimestamp: pos.tradeTimestamp, quoteUpdatedAt: pos.quoteUpdatedAt, priceSource: pos.priceSource }) } : pos), updatedAt: new Date().toISOString() })); setEditing(null); setMessage("Position enregistrée."); }} />}
+    <ul className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">{portfolio.positions.map(p => <li key={p.id}><span className="font-mono">{p.isin || p.name}</span> · {p.priceSource === "euronext" ? "Euronext" : "Saisie manuelle"}<span className="mt-1 block">{p.priceSource === "manual" && p.tradeTimestamp ? "Dernière transaction Euronext reçue" : "Dernière transaction"} : {timestamp(p.tradeTimestamp)}</span></li>)}</ul>
+    {Boolean(portfolio.quoteHistory?.length) && <details className="text-xs"><summary className="cursor-pointer text-muted-foreground">Historique des cours Euronext ({portfolio.quoteHistory?.length})</summary><div className="mt-3 max-h-64 overflow-auto"><table className="w-full text-left"><thead><tr><th className="p-2">ISIN</th><th className="p-2">Cours EUR</th><th className="p-2">Transaction (Paris)</th><th className="p-2">Mise à jour du flux (Paris)</th></tr></thead><tbody>{[...(portfolio.quoteHistory ?? [])].reverse().map((q, i) => <tr key={i} className="border-t border-border"><td className="whitespace-nowrap p-2 font-mono">{q.isin}</td><td className="whitespace-nowrap p-2 font-mono">{eur(q.price)}</td><td className="whitespace-nowrap p-2">{timestamp(q.tradeTimestamp)}</td><td className="whitespace-nowrap p-2">{timestamp(q.updateTimestamp)}</td></tr>)}</tbody></table></div></details>}
     <div className="flex flex-wrap justify-between gap-3 text-xs"><span className={result.targetsValid ? "text-success" : "text-warning"}>Total des cibles : {result.targetSum.toFixed(2)} %{!result.targetsValid && " · Pondérations à renseigner"}</span><Button asChild size="sm" variant="link" className="h-auto p-0"><Link to="/targets">Modifier les pondérations cibles<ArrowUpRight /></Link></Button></div>
     {active && <p className="text-xs text-muted-foreground">Cibles du {active.date} · Source : {active.source}</p>}
     </section>
@@ -105,6 +112,6 @@ export function Dashboard() {
       {!portfolio.transactions.length && <p className="text-sm text-muted-foreground">Aucune transaction enregistrée.</p>}
       <ul className="divide-y divide-border">{portfolio.transactions.map((t) => <li key={t.id} className="flex flex-wrap justify-between gap-3 py-3 text-sm"><span><span className={t.type === "buy" ? "text-success" : "text-destructive"}>{t.type === "buy" ? "Achat" : "Vente"}</span> · {t.name}<span className="mt-1 block text-xs text-muted-foreground">{t.date}</span></span><span className="font-mono text-xs">{t.quantity} parts × {eur(t.price)} = {eur(t.quantity * t.price)}</span></li>)}</ul>
     </section>
-    <footer className="border-t border-border py-6 text-xs text-muted-foreground">Approximation du MSCI ACWI. Les calculs ne constituent pas un conseil en investissement.</footer>
+    <footer className="space-y-2 border-t border-border py-6 text-xs text-muted-foreground"><p>Approximation du MSCI ACWI. Les calculs ne constituent pas un conseil en investissement.</p><p>Source : Euronext, données différées MiFID II. Dernières transactions disponibles, pas des cours de clôture officiels. <a className="underline" href="https://shamiherve.github.io/euronext-etf-quotes/" target="_blank" rel="noreferrer">Attribution et avertissement Euronext</a></p></footer>
   </main>;
 }
