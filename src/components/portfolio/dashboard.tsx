@@ -8,6 +8,7 @@ import { exportBackup, makeId, parseBackup, purchaseProposal, recordTransaction,
 import { eur, pct, pp } from "@/lib/rebalance";
 import { downloadJson } from "./target-editor";
 import { PurchasePlanner } from "./purchase-planner";
+import { FullBackupExport } from "./full-backup-export";
 
 const field = "w-full rounded-md border border-input bg-surface px-2 py-2 text-sm outline-none focus:ring-1 focus:ring-ring";
 const nonnegative = (s: string) => Math.max(0, Number(s) || 0);
@@ -68,6 +69,7 @@ export function Dashboard() {
       }} />
     </div></header>
     <p className="border-l-2 border-warning pl-3 text-xs text-muted-foreground">Données conservées dans ce navigateur uniquement. Exportez régulièrement une sauvegarde ; effacer les données du navigateur les supprimera.</p>
+    <FullBackupExport ready={hydrated} />
     {!hydrated && <p role="status" className="text-sm text-muted-foreground">Chargement des données locales…</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {quotes.status && <p role={quotes.failed ? "alert" : "status"} className={`text-sm ${quotes.failed ? "text-warning" : "text-muted-foreground"}`}>{quotes.status}</p>}

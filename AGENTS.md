@@ -10,6 +10,7 @@
 <!-- LOVABLE:END -->
 
 ## Portfolio architecture
+- Full-wealth backups use a separate read-only export/validation module with explicit rejection of unknown fields and declared historical orphan transaction references; legacy restoration and storage schemas remain unchanged to avoid migrations or silent data loss.
 - Keep the original generic simulation workbench separate from the ETF dashboard; both reuse the unchanged rebalance engine to preserve existing behavior.
 - Validate versioned portfolio backups before replacing any local data; persist only after hydration to prevent SSR overwrites.
 - Fetch the public Euronext quote feed only in the hydrated ETF dashboard, validate EUR records and merge price-only fields against the latest local state; this preserves concurrent holdings edits and keeps portfolio data off external services. Reference weights remain manual.

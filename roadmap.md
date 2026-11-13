@@ -1,4 +1,5 @@
 # ETF dashboard finalization
+- [x] Add a separate validated, timestamped full-wealth export; 15 synthetic export tests and 30 existing regression tests pass, with isolated browser download/read-only/error/mobile checks. Legacy exports, restoration, storage writes and market logic remain unchanged.
 - [x] Create the separate public shamiherve/euronext-etf-quotes repository and free GitHub Actions/Pages pipeline; publish no holdings or app code.
 - [x] Test all four configured ETF ISINs, EUR-only valid trades, conservative modification/non-price filters, failure preservation and separate timestamps: 19 tests pass; live GitHub run succeeds and public JSON is browser-readable.
 - [x] Configure dual UTC schedules targeting 18:30 Europe/Paris with DST gating, weekend/verified 2026–2027 holiday skips; real scheduled timing remains best-effort and is not yet observed.
