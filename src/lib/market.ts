@@ -15,7 +15,7 @@ export const EXCHANGES: Record<string, { label: string; euronext?: boolean; alia
   PCX: { label: "NYSE Arca", aliases: ["PCX", "NYSE ARCA", "ARCX"] },
   GER: { label: "XETRA", aliases: ["GER", "XETRA", "XETR"] },
   FRA: { label: "Francfort", aliases: ["FRA", "FRANKFURT", "FRANCFORT", "XFRA"] },
-  LSE: { label: "Bourse de Londres", aliases: ["LSE", "LONDON", "LONDRES", "XLON"] },
+  LSE: { label: "Bourse de Londres", aliases: ["LSE", "LONDON", "LONDRES", "XLON", "BOURSE DE LONDRES", "LONDON STOCK EXCHANGE"] },
   EBS: { label: "SIX Swiss Exchange", aliases: ["EBS", "SIX", "XSWX"] },
   STU: { label: "Stuttgart", aliases: ["STU", "STUTTGART", "XSTU"] },
 };
