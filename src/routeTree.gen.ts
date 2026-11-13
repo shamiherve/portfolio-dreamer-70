@@ -10,12 +10,30 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AllocationRouteImport } from './routes/allocation'
+import { Route as PatrimoineRouteImport } from './routes/patrimoine'
+import { Route as PositionsRouteImport } from './routes/positions'
 import { Route as SimulationsRouteImport } from './routes/simulations'
 import { Route as TargetsRouteImport } from './routes/targets'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AllocationRoute = AllocationRouteImport.update({
+  id: '/allocation',
+  path: '/allocation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PatrimoineRoute = PatrimoineRouteImport.update({
+  id: '/patrimoine',
+  path: '/patrimoine',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PositionsRoute = PositionsRouteImport.update({
+  id: '/positions',
+  path: '/positions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SimulationsRoute = SimulationsRouteImport.update({
@@ -31,30 +49,61 @@ const TargetsRoute = TargetsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/allocation': typeof AllocationRoute
+  '/patrimoine': typeof PatrimoineRoute
+  '/positions': typeof PositionsRoute
   '/simulations': typeof SimulationsRoute
   '/targets': typeof TargetsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/allocation': typeof AllocationRoute
+  '/patrimoine': typeof PatrimoineRoute
+  '/positions': typeof PositionsRoute
   '/simulations': typeof SimulationsRoute
   '/targets': typeof TargetsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/allocation': typeof AllocationRoute
+  '/patrimoine': typeof PatrimoineRoute
+  '/positions': typeof PositionsRoute
   '/simulations': typeof SimulationsRoute
   '/targets': typeof TargetsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/simulations' | '/targets'
+  fullPaths:
+    | '/'
+    | '/allocation'
+    | '/patrimoine'
+    | '/positions'
+    | '/simulations'
+    | '/targets'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/simulations' | '/targets'
-  id: '__root__' | '/' | '/simulations' | '/targets'
+  to:
+    | '/'
+    | '/allocation'
+    | '/patrimoine'
+    | '/positions'
+    | '/simulations'
+    | '/targets'
+  id:
+    | '__root__'
+    | '/'
+    | '/allocation'
+    | '/patrimoine'
+    | '/positions'
+    | '/simulations'
+    | '/targets'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AllocationRoute: typeof AllocationRoute
+  PatrimoineRoute: typeof PatrimoineRoute
+  PositionsRoute: typeof PositionsRoute
   SimulationsRoute: typeof SimulationsRoute
   TargetsRoute: typeof TargetsRoute
 }
@@ -66,6 +115,27 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/allocation': {
+      id: '/allocation'
+      path: '/allocation'
+      fullPath: '/allocation'
+      preLoaderRoute: typeof AllocationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/patrimoine': {
+      id: '/patrimoine'
+      path: '/patrimoine'
+      fullPath: '/patrimoine'
+      preLoaderRoute: typeof PatrimoineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/positions': {
+      id: '/positions'
+      path: '/positions'
+      fullPath: '/positions'
+      preLoaderRoute: typeof PositionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/simulations': {
@@ -87,6 +157,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AllocationRoute: AllocationRoute,
+  PatrimoineRoute: PatrimoineRoute,
+  PositionsRoute: PositionsRoute,
   SimulationsRoute: SimulationsRoute,
   TargetsRoute: TargetsRoute,
 }

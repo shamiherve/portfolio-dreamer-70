@@ -17,3 +17,4 @@
 - The separate shamiherve/euronext-etf-quotes repository owns Python ingestion and GitHub Actions/Pages publication; its public quotes.json exposes market records only and must remain independent of browser-held portfolio state, preventing personal data publication and app-server dependency.
 - Keep whole-unit search and editable purchase evaluation in a separate planner module; dashboard summaries use current holdings so proposed purchases never change saved positions or the theoretical engine.
 - Keep theme switching in the shared navigation, apply semantic CSS tokens through the root dark class, and restore only the separate browser theme preference after hydration so portfolio storage remains untouched.
+- Global wealth (non-ETF holdings, account/class/mapping targets) lives in its own versioned local key via src/lib/wealth.ts; ETF holdings are read from the ETF portfolio and never copied, keeping one source of truth and counting each position once.
