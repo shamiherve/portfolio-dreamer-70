@@ -18,12 +18,12 @@ const res = (id: string, inp: IdentityInput, sym: string, exch: string, price: n
 
 describe("Identification des instruments", () => {
   it("Euronext Paris share resolves via ISIN", () => {
-    const r = resolveIdentity(input(), [{ symbol: "TTE.PA", exchange: "PAR", name: "TotalEnergies SE" }], parseChart(chart({ longName: "TotalEnergies" })), true);
+    const r = resolveIdentity(input(), [{ symbol: "TTE.PA", exchange: "PAR", name: "TotalEnergies SE" }], parseChart(chart({ symbol: "TTE.PA", longName: "TotalEnergies" })), true);
     expect(r.status).toBe("verified"); expect(r.symbol).toBe("TTE.PA");
   });
   it("NYSE and NASDAQ listings resolve to their own exchange", () => {
-    const ko = resolveIdentity(input({ name: "Coca-Cola", isin: "US1912161007", ticker: "KO", exchange: "NYSE", currency: "USD" }), [{ symbol: "KO", exchange: "NYQ", name: "Coca-Cola" }], parseChart(chart({ currency: "USD", exchangeName: "NYQ", longName: "Coca-Cola" })), true);
-    const ms = resolveIdentity(input({ name: "Microsoft", isin: "US5949181045", ticker: "MSFT", exchange: "NASDAQ", currency: "USD" }), [{ symbol: "MSFT", exchange: "NMS", name: "Microsoft" }], parseChart(chart({ currency: "USD", exchangeName: "NMS", longName: "Microsoft" })), true);
+    const ko = resolveIdentity(input({ name: "Coca-Cola", isin: "US1912161007", ticker: "KO", exchange: "NYSE", currency: "USD" }), [{ symbol: "KO", exchange: "NYQ", name: "Coca-Cola" }], parseChart(chart({ symbol: "KO", currency: "USD", exchangeName: "NYQ", longName: "Coca-Cola" })), true);
+    const ms = resolveIdentity(input({ name: "Microsoft", isin: "US5949181045", ticker: "MSFT", exchange: "NASDAQ", currency: "USD" }), [{ symbol: "MSFT", exchange: "NMS", name: "Microsoft" }], parseChart(chart({ symbol: "MSFT", currency: "USD", exchangeName: "NMS", longName: "Microsoft" })), true);
     expect([ko.verified?.exchange, ms.verified?.exchange]).toEqual(["NYSE", "NASDAQ"]);
   });
   it("ambiguous listings are flagged, never guessed", () => {

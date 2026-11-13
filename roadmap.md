@@ -14,3 +14,4 @@
 - [x] Add Dashboard Patrimonial, unified positions (stocks, gold, fonds euro), editable account/class targets with consistency checks, global score, buy-only analysis and contribution simulator.
 - [x] Automatic free quotes for stocks and gold (Yahoo Finance, ECB FX), instrument audit page, dashboard quote status, manual fallbacks; 66 tests pass.
 - [ ] Scheduled updates for stocks/gold while the app is closed — blocked: needs the user's consent to publish their instrument list (no quantities) in the public quotes repository.
+- [x] Correct Stellantis and general listing/provider mapping; 76 tests pass and isolated desktop/mobile UI verifies live STLAP.PA EUR quotes, persistence, source exchange and unchanged quantity/targets. The user's browser-held listing is not accessible from the sandbox, so runtime resolution uses their saved exchange/ticker without assuming Paris.

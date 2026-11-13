@@ -10,15 +10,16 @@ export const assetClassSchema = z.object({ id: z.string().min(1), name: z.string
 export const mappingSchema = z.object({ accountId: z.string().min(1), classId: z.string().min(1), target: pctSchema });
 const iso = z.string().datetime();
 /** Market data is kept apart from the position itself: quantities are never touched by updates. */
+const quoteSource = z.object({ provider: z.enum(["yahoo", "euronext"]), symbol: z.string(), exchange: z.string(), fallback: z.boolean() });
 export const marketSchema = z.object({
-  status: z.enum(["verified", "corrected", "manual", "none"]), provider: z.enum(["yahoo", "manual", "none"]),
+  status: z.enum(["verified", "corrected", "manual", "none"]), provider: z.enum(["yahoo", "euronext", "manual", "none"]),
   symbol: z.string().nullable(), userSymbol: z.string().nullable(), priceMode: z.enum(["auto", "manual"]),
   original: z.object({ name: z.string(), isin: z.string(), ticker: z.string(), exchange: z.string(), currency: z.string() }),
   verified: z.object({ name: z.string(), isin: z.string(), ticker: z.string(), exchange: z.string(), currency: z.string() }).nullable(),
   issues: z.array(z.string()), candidates: z.array(z.object({ symbol: z.string(), exchange: z.string(), name: z.string() })),
   audit: z.array(z.object({ at: iso, field: z.string(), from: z.string(), to: z.string(), reason: z.string() })),
-  quote: z.object({ price: z.number().positive(), currency: z.string(), timestamp: iso, retrievedAt: iso }).nullable(),
-  pending: z.object({ price: z.number().positive(), currency: z.string(), timestamp: iso, reason: z.string() }).nullable(),
+  quote: z.object({ price: z.number().positive(), currency: z.string(), timestamp: iso, retrievedAt: iso, source: quoteSource.optional() }).nullable(),
+  pending: z.object({ price: z.number().positive(), currency: z.string(), timestamp: iso, reason: z.string(), source: quoteSource.optional() }).nullable(),
   fx: z.object({ rate: z.number().positive(), date: date, source: z.string() }).nullable(),
   quoteStatus: z.enum(["ok", "stale", "review", "error", "manual", "none"]), lastError: z.string().nullable(),
   lastSuccessAt: iso.nullable(), checkedAt: iso.nullable(),

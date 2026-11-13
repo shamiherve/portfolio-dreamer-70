@@ -34,12 +34,13 @@ export function applyMarket(w: Wealth, results: MarketResult[], fx: FxSnapshot |
     if (q.currency !== "EUR") {
       const ecb = fx?.rates[q.currency];
       if (!ecb) { anyFail = true; lastError = fxError ?? `Taux ${q.currency}/EUR indisponible`; return { ...next, market: { ...m, quoteStatus: "error", lastError: `Taux de change ${q.currency} → EUR indisponible : dernier cours conservé.` } }; }
-      fxRate = toEurRate(ecb); fxInfo = { rate: fxRate, date: fx!.date, source: "BCE" };
+      fxRate = toEurRate(ecb); fxInfo = { rate: fxRate, date: fx?.date ?? parisDate(nowIso), source: "BCE" };
     } else fxInfo = { rate: 1, date: parisDate(nowIso), source: "EUR" };
     const problem = quoteProblem(q, res.verified.currency, { price: h.price, currency: h.currency }, now);
     if (problem?.reject) { anyFail = true; lastError = problem.reject; return { ...next, market: { ...m, quoteStatus: "error", lastError: `${problem.reject} Dernier cours valide conservé.` } }; }
-    const stored = { price: q.price, currency: q.currency, timestamp: q.timestamp, retrievedAt: nowIso };
-    if (problem?.review && !(prev.pending && prev.pending.price === q.price)) return { ...next, market: { ...m, fx: fxInfo, pending: { ...stored, reason: problem.review }, quoteStatus: "review" } };
+    if (prev.quote && Date.parse(q.timestamp) < Date.parse(prev.quote.timestamp)) return { ...h, market: { ...prev, checkedAt: nowIso, lastError: "Cotation plus ancienne : dernier cours valide conservé." } };
+    const stored = { price: q.price, currency: q.currency, timestamp: q.timestamp, retrievedAt: nowIso, source: q.source };
+    if (problem?.review) return { ...next, market: { ...m, fx: fxInfo, pending: { ...stored, reason: problem.review }, quoteStatus: "review" } };
     anyOk = true;
     if (m.priceMode === "manual") return { ...next, market: { ...m, quote: stored, fx: fxInfo, pending: null, quoteStatus: "manual", lastSuccessAt: nowIso } };
     const kind = quoteKind(q.timestamp, now);
@@ -53,7 +54,7 @@ export function applyMarket(w: Wealth, results: MarketResult[], fx: FxSnapshot |
 export function acceptPending(w: Wealth, id: string, nowIso: string): Wealth {
   return wealthSchema.parse({ ...w, holdings: w.holdings.map(h => {
     const m = h.market; if (h.id !== id || !m?.pending) return h;
-    const p = m.pending; const quote = { price: p.price, currency: p.currency, timestamp: p.timestamp, retrievedAt: nowIso };
+    const p = m.pending; const quote = { price: p.price, currency: p.currency, timestamp: p.timestamp, retrievedAt: nowIso, source: p.source };
     if (m.priceMode === "manual") return { ...h, market: { ...m, quote, pending: null, quoteStatus: "manual" } };
     return { ...h, price: p.price, priceDate: parisDate(p.timestamp), fxRate: p.currency === "EUR" ? 1 : m.fx?.rate ?? h.fxRate, market: { ...m, quote, pending: null, quoteStatus: quoteKind(p.timestamp, new Date(nowIso)) === "stale" ? "stale" : "ok", lastSuccessAt: nowIso } };
   }) });
