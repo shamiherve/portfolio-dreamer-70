@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AllocationRouteImport } from './routes/allocation'
+import { Route as InstrumentsRouteImport } from './routes/instruments'
 import { Route as PatrimoineRouteImport } from './routes/patrimoine'
 import { Route as PositionsRouteImport } from './routes/positions'
 import { Route as SimulationsRouteImport } from './routes/simulations'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const AllocationRoute = AllocationRouteImport.update({
   id: '/allocation',
   path: '/allocation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InstrumentsRoute = InstrumentsRouteImport.update({
+  id: '/instruments',
+  path: '/instruments',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PatrimoineRoute = PatrimoineRouteImport.update({
@@ -50,6 +56,7 @@ const TargetsRoute = TargetsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/allocation': typeof AllocationRoute
+  '/instruments': typeof InstrumentsRoute
   '/patrimoine': typeof PatrimoineRoute
   '/positions': typeof PositionsRoute
   '/simulations': typeof SimulationsRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/allocation': typeof AllocationRoute
+  '/instruments': typeof InstrumentsRoute
   '/patrimoine': typeof PatrimoineRoute
   '/positions': typeof PositionsRoute
   '/simulations': typeof SimulationsRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/allocation': typeof AllocationRoute
+  '/instruments': typeof InstrumentsRoute
   '/patrimoine': typeof PatrimoineRoute
   '/positions': typeof PositionsRoute
   '/simulations': typeof SimulationsRoute
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/allocation'
+    | '/instruments'
     | '/patrimoine'
     | '/positions'
     | '/simulations'
@@ -85,6 +95,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/allocation'
+    | '/instruments'
     | '/patrimoine'
     | '/positions'
     | '/simulations'
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/allocation'
+    | '/instruments'
     | '/patrimoine'
     | '/positions'
     | '/simulations'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AllocationRoute: typeof AllocationRoute
+  InstrumentsRoute: typeof InstrumentsRoute
   PatrimoineRoute: typeof PatrimoineRoute
   PositionsRoute: typeof PositionsRoute
   SimulationsRoute: typeof SimulationsRoute
@@ -122,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/allocation'
       fullPath: '/allocation'
       preLoaderRoute: typeof AllocationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/instruments': {
+      id: '/instruments'
+      path: '/instruments'
+      fullPath: '/instruments'
+      preLoaderRoute: typeof InstrumentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/patrimoine': {
@@ -158,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AllocationRoute: AllocationRoute,
+  InstrumentsRoute: InstrumentsRoute,
   PatrimoineRoute: PatrimoineRoute,
   PositionsRoute: PositionsRoute,
   SimulationsRoute: SimulationsRoute,

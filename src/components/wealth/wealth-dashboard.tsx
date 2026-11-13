@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { usePortfolio } from "@/lib/use-portfolio";
 import { useQuotes } from "@/lib/use-quotes";
 import { useWealth } from "@/lib/use-wealth";
+import { useMarket } from "@/lib/use-market";
+import { QuoteStatusPanel } from "./quote-status";
 import { analyse, bestAccount, recommendations, simulateContribution, ETF_ACCOUNT, ETF_CLASS } from "@/lib/wealth";
 import { wholeUnitProposal, scoreLabel } from "@/lib/whole-unit";
 import { eur } from "@/lib/rebalance";
@@ -15,7 +17,8 @@ const scoreText = (s: number | null) => s === null ? "—" : `${Math.round(s)} /
 
 export function WealthDashboard() {
   const { portfolio, hydrated, error, commit } = usePortfolio();
-  const { wealth, hydrated: wh, error: we } = useWealth();
+  const { wealth, hydrated: wh, error: we, commit: wcommit } = useWealth();
+  const market = useMarket(wealth, wh && !we, wcommit);
   const quotes = useQuotes(hydrated, Boolean(error), commit);
   const a = useMemo(() => analyse(portfolio, wealth), [portfolio, wealth]);
   const [amount, setAmount] = useState("1000");
@@ -41,6 +44,7 @@ export function WealthDashboard() {
       <div className="text-right text-xs text-muted-foreground"><p>Dernière valorisation : {a.lastDate ? new Date(a.lastDate).toLocaleDateString("fr-FR") : "—"} · Cours ETF vérifiés : {ts(portfolio.quotesCheckedAt)}</p>
         <Button size="sm" variant="ghost" onClick={() => void quotes.refresh()} disabled={quotes.loading}><RefreshCw className={quotes.loading ? "animate-spin" : ""} />Actualiser les cours ETF</Button>{quotes.status && <p>{quotes.status}</p>}</div>
     </header>
+    <QuoteStatusPanel portfolio={portfolio} wealth={wealth} busy={market.busy !== null || quotes.loading} message={[market.message, quotes.status].filter(Boolean).join(" ")} onRefresh={() => { void quotes.refresh(); void market.refresh(); }} />
     {(error || we) && <p role="alert" className="text-sm text-destructive">{error ?? we}</p>}
     {a.issues.length > 0 && <div role="alert" className="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm"><p className="flex items-center gap-2 font-medium"><AlertTriangle className="size-4" />Cibles incohérentes — résultats à interpréter avec prudence</p><ul className="ml-6 list-disc">{a.issues.map(i => <li key={i}>{i}</li>)}</ul><Link to="/allocation" className="underline">Corriger les cibles</Link></div>}
     {a.unvalued.length > 0 && <p className="text-sm text-warning">Positions sans cours, comptées à 0 € : {a.unvalued.join(", ")}.</p>}

@@ -12,3 +12,5 @@
 - [x] Add local persistence, transaction history, backup export/import confirmation.
 - [x] Verify calculations, backups and desktop/mobile flows: 32 unit tests pass; browser checks cover dated manual inputs, validated targets, both modes, edits/refusal/reset, persistence, backup rejection/cancel/restore and simulation save/rename/load.- [x] Fix the quote pipeline schedule so delayed GitHub runs after the Paris close still publish (backup cron slots).
 - [x] Add Dashboard Patrimonial, unified positions (stocks, gold, fonds euro), editable account/class targets with consistency checks, global score, buy-only analysis and contribution simulator.
+- [x] Automatic free quotes for stocks and gold (Yahoo Finance, ECB FX), instrument audit page, dashboard quote status, manual fallbacks; 66 tests pass.
+- [ ] Scheduled updates for stocks/gold while the app is closed — blocked: needs the user's consent to publish their instrument list (no quantities) in the public quotes repository.

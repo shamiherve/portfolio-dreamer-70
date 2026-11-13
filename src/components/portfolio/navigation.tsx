@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { ChartNoAxesCombined, SlidersHorizontal, FlaskConical, LayoutDashboard, List, Target } from "lucide-react";
+import { ChartNoAxesCombined, SlidersHorizontal, FlaskConical, LayoutDashboard, List, Target, ShieldCheck } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 
 export function PortfolioNavigation() {
@@ -10,6 +10,7 @@ export function PortfolioNavigation() {
       <Button asChild variant="ghost" size="sm"><Link to="/patrimoine" activeProps={{ className: "bg-secondary" }}><LayoutDashboard />Dashboard Patrimonial</Link></Button>
       <Button asChild variant="ghost" size="sm"><Link to="/" activeProps={{ className: "bg-secondary" }} activeOptions={{ exact: true }}><ChartNoAxesCombined />Portefeuille ETF</Link></Button>
       <Button asChild variant="ghost" size="sm"><Link to="/positions" activeProps={{ className: "bg-secondary" }}><List />Positions individuelles</Link></Button>
+      <Button asChild variant="ghost" size="sm"><Link to="/instruments" activeProps={{ className: "bg-secondary" }}><ShieldCheck />Contrôle des instruments</Link></Button>
       <Button asChild variant="ghost" size="sm"><Link to="/allocation" activeProps={{ className: "bg-secondary" }}><Target />Allocation cible</Link></Button>
       <Button asChild variant="ghost" size="sm"><Link to="/targets" activeProps={{ className: "bg-secondary" }}><SlidersHorizontal />Pondérations ETF</Link></Button>
       <Button asChild variant="ghost" size="sm"><Link to="/simulations" activeProps={{ className: "bg-secondary" }}><FlaskConical />Simulations</Link></Button>
