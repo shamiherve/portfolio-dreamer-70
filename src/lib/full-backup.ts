@@ -40,7 +40,7 @@ const currency = (value: string) => /^[A-Z]{3}$/.test(value);
 export const fullBackupSchema = z.unknown().superRefine((raw, ctx) => {
   const result = envelope.safeParse(raw);
   if (!result.success) {
-    for (const issue of result.error.issues) ctx.addIssue(issue);
+    for (const issue of result.error.issues) ctx.addIssue({ code: "custom", message: issue.message, path: issue.path });
     return;
   }
   const b = result.data;
