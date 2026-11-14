@@ -54,8 +54,8 @@ export function initialWealth(): Wealth {
       { id: "av", name: "Assurance-vie Linxea Spirit 2", target: 10, fractionalAllowed: false },
     ],
     classes: [
-      { id: "etf", name: "ETF actions", parent: "equity", target: 70 },
-      { id: "stocks", name: "Actions individuelles", parent: "equity", target: 15 },
+      { id: "etf", name: "ETF", parent: "equity", target: 70 },
+      { id: "stocks", name: "Actions", parent: "equity", target: 15 },
       { id: "bonds", name: "Fonds & obligations", parent: null, target: 10 },
       { id: "gold", name: "Métaux précieux (or)", parent: null, target: 5 },
     ],
@@ -70,6 +70,19 @@ export function initialWealth(): Wealth {
     ],
     updatedAt: null,
   };
+}
+
+/** Renames default classes by stable id; a user-customized name is never overwritten. */
+const CLASS_RENAMES: Record<string, { from: string; to: string }> = {
+  etf: { from: "ETF actions", to: "ETF" },
+  stocks: { from: "Actions individuelles", to: "Actions" },
+};
+export function renameClasses(w: Wealth): Wealth {
+  const classes = w.classes.map(c => {
+    const r = CLASS_RENAMES[c.id];
+    return r && c.name === r.from ? { ...c, name: r.to } : c;
+  });
+  return classes.some((c, i) => c !== w.classes[i]) ? { ...w, classes } : w;
 }
 
 const sum = (xs: number[]) => xs.reduce((s, x) => s + x, 0);

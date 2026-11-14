@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { initialPortfolio } from "./portfolio";
-import { analyse, bestAccount, holdingError, initialWealth, recommendations, simulateContribution, targetIssues, unifiedLines, type Holding } from "./wealth";
+import { analyse, bestAccount, holdingError, initialWealth, recommendations, renameClasses, simulateContribution, targetIssues, unifiedLines, type Holding } from "./wealth";
 
 const pf = () => { const p = initialPortfolio(); p.positions = p.positions.map(x => ({ ...x, quantity: 10, price: 50, priceDate: "2026-11-13" })); return p; }; // 2000 € ETF
 const w = () => { const x = initialWealth(); x.holdings = x.holdings.map(h => h.id === "fonds-euro" ? { ...h, value: 1000, priceDate: "2026-11-01" } : { ...h, quantity: 10, price: 50, priceDate: "2026-11-13" }); return x; }; // AV 1000, gold 500
@@ -55,6 +55,15 @@ describe("Dashboard patrimonial", () => {
     expect(s.split.map(x => x.classId).sort()).toEqual(["gold", "stocks"]);
     expect(s.after.total).toBeCloseTo(4500);
     expect(bestAccount(pf(), w(), 1000)).not.toBeNull();
+  });
+  it("renames default classes by id but keeps user-customized names", () => {
+    const x = initialWealth();
+    x.classes[0]!.name = "ETF actions"; x.classes[1]!.name = "Actions individuelles";
+    const renamed = renameClasses(x);
+    expect(renamed.classes.map(c => c.name)).toEqual(["ETF", "Actions", "Fonds & obligations", "Métaux précieux (or)"]);
+    const custom = initialWealth(); custom.classes[0]!.name = "Mes ETF";
+    expect(renameClasses(custom).classes[0]!.name).toBe("Mes ETF");
+    expect(initialWealth().classes.map(c => c.name)).toEqual(["ETF", "Actions", "Fonds & obligations", "Métaux précieux (or)"]);
   });
   it("empty portfolio does not crash", () => {
     const a = analyse(initialPortfolio(), initialWealth());
