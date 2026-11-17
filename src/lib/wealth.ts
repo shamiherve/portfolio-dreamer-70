@@ -49,9 +49,9 @@ export function initialWealth(): Wealth {
   return {
     version: 1,
     accounts: [
-      { id: "pea", name: "PEA Fortuneo", target: 75, fractionalAllowed: false },
-      { id: "cto", name: "CTO Trade Republic", target: 15, fractionalAllowed: true },
-      { id: "av", name: "Assurance-vie Linxea Spirit 2", target: 10, fractionalAllowed: false },
+      { id: "pea", name: "PEA", target: 75, fractionalAllowed: false },
+      { id: "cto", name: "CTO", target: 15, fractionalAllowed: true },
+      { id: "av", name: "Assurance-vie", target: 10, fractionalAllowed: false },
     ],
     classes: [
       { id: "etf", name: "ETF", parent: "equity", target: 70 },
@@ -83,6 +83,20 @@ export function renameClasses(w: Wealth): Wealth {
     return r && c.name === r.from ? { ...c, name: r.to } : c;
   });
   return classes.some((c, i) => c !== w.classes[i]) ? { ...w, classes } : w;
+}
+
+/** Rename only legacy defaults, preserving account identities and custom labels. */
+export function renameAccounts(w: Wealth): Wealth {
+  const renames: Record<string, { from: string; to: string }> = {
+    pea: { from: "PEA Fortuneo", to: "PEA" },
+    cto: { from: "CTO Trade Republic", to: "CTO" },
+    av: { from: "Assurance-vie Linxea Spirit 2", to: "Assurance-vie" },
+  };
+  const accounts = w.accounts.map(account => {
+    const rename = renames[account.id];
+    return rename && account.name === rename.from ? { ...account, name: rename.to } : account;
+  });
+  return accounts.some((account, i) => account !== w.accounts[i]) ? { ...w, accounts } : w;
 }
 
 const sum = (xs: number[]) => xs.reduce((s, x) => s + x, 0);

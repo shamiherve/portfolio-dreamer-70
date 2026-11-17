@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { initialPortfolio } from "./portfolio";
-import { analyse, bestAccount, holdingError, initialWealth, recommendations, renameClasses, simulateContribution, targetIssues, unifiedLines, type Holding } from "./wealth";
+import { analyse, bestAccount, holdingError, initialWealth, recommendations, renameAccounts, renameClasses, simulateContribution, targetIssues, unifiedLines, type Holding } from "./wealth";
 
 const pf = () => { const p = initialPortfolio(); p.positions = p.positions.map(x => ({ ...x, quantity: 10, price: 50, priceDate: "2026-11-13" })); return p; }; // 2000 € ETF
 const w = () => { const x = initialWealth(); x.holdings = x.holdings.map(h => h.id === "fonds-euro" ? { ...h, value: 1000, priceDate: "2026-11-01" } : { ...h, quantity: 10, price: 50, priceDate: "2026-11-13" }); return x; }; // AV 1000, gold 500
@@ -68,5 +68,17 @@ describe("Dashboard patrimonial", () => {
   it("empty portfolio does not crash", () => {
     const a = analyse(initialPortfolio(), initialWealth());
     expect(a.total).toBe(0); expect(a.score).toBeNull();
+  });
+  it("account renaming preserves identities, targets, holdings and customized accounts", () => {
+    const original = w();
+    const legacy = ["PEA Fortuneo", "CTO Trade Republic", "Assurance-vie Linxea Spirit 2"];
+    original.accounts = original.accounts.map((account, i) => ({ ...account, name: legacy[i] ?? account.name }));
+    const snapshot = structuredClone(original);
+    const renamed = renameAccounts(original);
+    expect(renamed).toEqual({ ...snapshot, accounts: snapshot.accounts.map((account, i) => ({ ...account, name: ["PEA", "CTO", "Assurance-vie"][i] })) });
+    expect(original).toEqual(snapshot);
+    expect(renameAccounts(renamed)).toBe(renamed);
+    const custom = { ...original, accounts: original.accounts.map(account => ({ ...account, name: "Mon compte" })) };
+    expect(renameAccounts(custom)).toBe(custom);
   });
 });

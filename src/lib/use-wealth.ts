@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { initialWealth, renameClasses, wealthSchema, WEALTH_KEY, type Wealth } from "./wealth";
+import { initialWealth, renameAccounts, renameClasses, wealthSchema, WEALTH_KEY, type Wealth } from "./wealth";
 
 /** Separate local key: never touches the ETF portfolio record. */
 export function useWealth() {
@@ -9,7 +9,7 @@ export function useWealth() {
   const current = useRef(wealth);
   const [readOnly, setReadOnly] = useState(false);
   useEffect(() => {
-    try { const raw = localStorage.getItem(WEALTH_KEY); if (raw) { const w = renameClasses(wealthSchema.parse(JSON.parse(raw))); localStorage.setItem(WEALTH_KEY, JSON.stringify(w)); current.current = w; setWealth(w); } }
+    try { const raw = localStorage.getItem(WEALTH_KEY); if (raw) { const w = renameAccounts(renameClasses(wealthSchema.parse(JSON.parse(raw)))); localStorage.setItem(WEALTH_KEY, JSON.stringify(w)); current.current = w; setWealth(w); } }
     catch { setReadOnly(true); setError("Les données patrimoniales locales sont illisibles ; elles n’ont pas été remplacées."); }
     setHydrated(true);
   }, []);
