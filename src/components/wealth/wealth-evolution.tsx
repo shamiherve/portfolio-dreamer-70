@@ -9,6 +9,7 @@ import { downloadJson } from "@/components/portfolio/target-editor";
 import { eur } from "@/lib/rebalance";
 import type { Portfolio } from "@/lib/portfolio";
 import type { Wealth } from "@/lib/wealth";
+import { ISIN_PATTERN, knownListings } from "@/lib/instrument-mapping";
 import { CONFIRMED_HISTORY_SYMBOLS, buildMoves, finalQuantities, dayBreakdown, PERIODS, reconstruct, SNAPSHOTS_KEY, snapshotsSchema, toEur, upsertSnapshot, windowPerformance, windowStart, type PeriodId, type PricePoint, type Snapshots } from "@/lib/performance";
 
 type Key = "global" | "pea" | "cto";
@@ -46,7 +47,10 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
       const h = wealth.holdings.find(x => x.isin === m.isin && x.accountId === m.account);
       const hist = HISTORICAL_INSTRUMENTS.find(x => x.isin === m.isin);
       const verifiedYahoo = h?.market && ["verified", "corrected"].includes(h.market.status) && h.market.provider === "yahoo" ? (h.market.userSymbol ?? h.market.symbol) : null;
-      seen.set(m.isin, { key: m.isin, isin: m.isin, symbol: CONFIRMED_HISTORY_SYMBOLS[m.isin] ?? (etf ? null : verifiedYahoo), currency: etf || hist ? "EUR" : (h?.market?.verified?.currency ?? h?.currency ?? "EUR"), name: etf?.name ?? h?.name ?? hist?.name ?? m.isin, account: m.account });
+      // Never send a bare ISIN as a chart symbol; reuse the instrument mapping's Euronext Paris listing when one exists.
+      const yahoo = verifiedYahoo && !ISIN_PATTERN.test(verifiedYahoo) ? verifiedYahoo : null;
+      const mappedParis = knownListings(m.isin).find(c => c.exchange === "PAR")?.symbol ?? null;
+      seen.set(m.isin, { key: m.isin, isin: m.isin, symbol: CONFIRMED_HISTORY_SYMBOLS[m.isin] ?? (etf ? null : m.account === "pea" ? (mappedParis ?? yahoo) : (yahoo ?? mappedParis)), currency: etf || hist ? "EUR" : (h?.market?.verified?.currency ?? h?.currency ?? "EUR"), name: etf?.name ?? h?.name ?? hist?.name ?? m.isin, account: m.account });
     }
     return [...seen.values()];
   }, [moves, portfolio.positions, wealth.holdings]);
@@ -193,7 +197,9 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
     {series && last && (() => { const b = dayBreakdown(moves, prices, last.date); return <details className="text-sm"><summary className="cursor-pointer font-medium">Détail du calcul au {fr(last.date)}</summary>
       <div className="mt-2 overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-muted-foreground"><tr><th className="p-1">Compte</th><th className="p-1">Instrument</th><th className="p-1 text-right">Quantité reconstituée</th><th className="p-1 text-right">Clôture (€)</th><th className="p-1">Date du cours</th><th className="p-1 text-right">Valeur</th></tr></thead>
         <tbody>{(["pea", "cto"] as const).flatMap(a => [...b.lines.filter(l => l.account === a).map(l => <tr key={`${a}${l.isin}`} className="border-t border-border"><td className="p-1">{a.toUpperCase()}</td><td className="p-1">{names.get(l.isin) ?? l.isin}</td><td className="p-1 text-right tabular-nums">{l.quantity}</td><td className="p-1 text-right tabular-nums">{l.close === null ? "manquant" : l.close.toFixed(2)}</td><td className="p-1">{fr(l.priceDate)}</td><td className="p-1 text-right tabular-nums">{l.value === null ? "—" : eur(l.value)}</td></tr>),
-          <tr key={`${a}cash`} className="border-t border-border font-medium"><td className="p-1">{a.toUpperCase()}</td><td className="p-1">Espèces nettes reconstituées</td><td /><td /><td /><td className="p-1 text-right tabular-nums">{eur(b.cash[a])}</td></tr>])}</tbody></table></div>
+          <tr key={`${a}cash`} className="border-t border-border"><td className="p-1">{a.toUpperCase()}</td><td className="p-1">Espèces nettes reconstituées</td><td /><td /><td /><td className="p-1 text-right tabular-nums">{eur(b.cash[a])}</td></tr>,
+          (() => { const ls = b.lines.filter(l => l.account === a); const miss = ls.filter(l => l.value === null); const sum = Math.round((b.cash[a] + ls.reduce((t, l) => t + (l.value ?? 0), 0)) * 100) / 100; const pt = series[a].at(-1)?.value ?? null;
+            return <tr key={`${a}total`} className="border-t border-border font-semibold"><td className="p-1">{a.toUpperCase()}</td><td className="p-1" colSpan={4}>{miss.length ? `Valeur partielle, incomplète — cours manquant : ${miss.map(l => names.get(l.isin) ?? l.isin).join(", ")}. Le dernier point de la courbe reste vide.` : `Total = dernier point de la courbe (${pt === null ? "—" : eur(pt)})`}</td><td className="p-1 text-right tabular-nums">{miss.length ? `${eur(sum)} (partiel)` : eur(sum)}</td></tr>; })()])}</tbody></table></div>
       <p className="mt-1 text-xs text-muted-foreground">Une ligne absente ici n’est pas dans le grand livre ni dans les transactions ETF de ce navigateur ; des espèces très négatives signalent des achats sans le versement correspondant.</p>
     </details>; })()}
 
