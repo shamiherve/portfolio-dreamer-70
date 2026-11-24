@@ -30,3 +30,18 @@ describe("Consolidated workbook (net amounts)", () => {
     expect(consolidatedCash(n)).toMatchObject({ balance: 0.9, informational: 1, movements: 2 });
   });
 });
+import { initialPortfolio } from "./portfolio";
+import { initialWealth } from "./wealth";
+import { emptyLedger } from "./ledger";
+import { detectMapping, previewHistory } from "./history-import";
+import { consolidatedOptions } from "./history-consolidated";
+describe("Amundi CAC 40 historical round trip", () => {
+  it("admits buy 79,62 € and sell 85,29 € under FR0007052782 and leaves 0 unit with no position created", () => {
+    const n = normalizeConsolidated({ name: "PEA", grid: [H.map(c), ...[["Amundi CAC 40 UCITS ETF - EUR DIS", "Achat Comptant", "2026-02-02", 1, 79.62, -79.62, 0, -79.62, "EUR"], ["Amundi CAC 40 UCITS ETF - EUR DIS", "Vente comptant", "2026-07-30", 1, 85.59, 85.59, -0.3, 85.29, "EUR"]].map(r => r.map(c))] });
+    const p = initialPortfolio(); const w = initialWealth();
+    const r = previewHistory(n, { file: "x", headerRow: 1, mapping: detectMapping(n.grid[0] ?? []), importedAt: "2026-11-24T15:00:00Z", accountId: "pea", broker: "fortuneo", timezone: "Europe/Paris", decimal: "dot", currency: "EUR", amountBasis: "gross", overrides: {}, ...consolidatedOptions(n) }, p, w, emptyLedger());
+    expect(r.accepted.map(e => [e.isin, e.type, e.quantity])).toEqual([["FR0007052782", "buy", 1], ["FR0007052782", "sell", 1]]);
+    expect(r.cash[0]?.balance).toBeCloseTo(5.67, 2);
+    expect(p.positions.some(x => x.isin === "FR0007052782") || w.holdings.some(x => x.isin === "FR0007052782")).toBe(false);
+  });
+});

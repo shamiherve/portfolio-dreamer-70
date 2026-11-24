@@ -35,8 +35,10 @@ export function readLedger(storage: Pick<Storage, "getItem">): Ledger {
   const raw = storage.getItem(LEDGER_KEY);
   return raw === null ? emptyLedger() : ledgerSchema.parse(JSON.parse(raw));
 }
+/** User-confirmed (24/11/2026) closed historical instruments: ledger identity only, never a position. */
+export const HISTORICAL_INSTRUMENTS = [{ id: "hist:amundi-cac40", accountId: "pea", isin: "FR0007052782", name: "Amundi CAC 40 UCITS ETF - EUR DIS" }] as const;
 export function instruments(portfolio: Portfolio, wealth: Wealth) {
-  return [...portfolio.positions.map(p => ({ id: `etf:${p.id}`, accountId: "pea", isin: p.isin, name: p.name })), ...wealth.holdings.map(h => ({ id: `w:${h.id}`, accountId: h.accountId, isin: h.isin, name: h.name }))];
+  return [...HISTORICAL_INSTRUMENTS.filter(h => !portfolio.positions.some(p => p.isin === h.isin) && !wealth.holdings.some(w => w.accountId === h.accountId && w.isin === h.isin)),...portfolio.positions.map(p => ({ id: `etf:${p.id}`, accountId: "pea", isin: p.isin, name: p.name })), ...wealth.holdings.map(h => ({ id: `w:${h.id}`, accountId: h.accountId, isin: h.isin, name: h.name }))];
 }
 // Exact economic key excludes file/line and UI labels so retrying another export cannot duplicate cash.
 export function eventKey(e: LedgerEvent) {

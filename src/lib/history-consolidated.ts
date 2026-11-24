@@ -6,7 +6,7 @@ const SOURCE = "Source · ";
 const REQUIRED = ["Libellé", "Opération", "Montant brut", "Courtage/Prélèvement", "Montant net"];
 /** File labels → ISINs confirmed by the user's reference list; the ISIN must still exist in the local referential. */
 export const LABEL_ISIN: Record<"pea" | "cto", Record<string, string>> = {
-  pea: { "BNP PARIBAS EASY S&P 500 UCITS ETF - C EUR ACC": "FR0011550185", "BNP PARIBAS EASY STOXX EUROPE 600 UCITS ETF - C ACC": "FR0011550193", "Amundi PEA Emergent (MSCI Emerging) ESG Transition UCITS ETF - EUR DIS": "FR0013412020", "Amundi PEA Japon (TOPIX) UCITS ETF - EUR DIS": "FR0013411980", "STELLANTIS NV": "NL00150001Q9", "AIR LIQUIDE": "FR0000120073", "TOTALENERGIES": "FR0000120271", "VEOLIA ENVIRON.": "FR0000124141" },
+  pea: { "BNP PARIBAS EASY S&P 500 UCITS ETF - C EUR ACC": "FR0011550185", "BNP PARIBAS EASY STOXX EUROPE 600 UCITS ETF - C ACC": "FR0011550193", "Amundi PEA Emergent (MSCI Emerging) ESG Transition UCITS ETF - EUR DIS": "FR0013412020", "Amundi PEA Japon (TOPIX) UCITS ETF - EUR DIS": "FR0013411980", "STELLANTIS NV": "NL00150001Q9", "AIR LIQUIDE": "FR0000120073", "TOTALENERGIES": "FR0000120271", "VEOLIA ENVIRON.": "FR0000124141", "Amundi CAC 40 UCITS ETF - EUR DIS": "FR0007052782" },
   cto: { "Physical Gold USD (Acc)": "IE00B4ND3602", "Berkshire Hathaway (B)": "US0846707026", "Embraer (ADR)": "US29082A1079", "Xylem": "US98419M1009", "Visa": "US92826C8394", "Microsoft": "US5949181045" },
 };
 const headings = (s: ImportSheet) => s.grid[0]?.map(c => c.text.trim()) ?? [];
