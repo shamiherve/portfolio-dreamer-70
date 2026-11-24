@@ -21,6 +21,29 @@ export function confirmedWorkbookOptions(sheet: ImportSheet, file: string): Part
   return defaults;
 }
 
+/** User-confirmed control quantities (24/11/2026): compared only, never written to positions. */
+export const REFERENCE_QUANTITIES: { accountId: "pea" | "cto"; isin: string; name: string; quantity: number }[] = [
+  { accountId: "pea", isin: "FR0011550185", name: "BNP Paribas Easy S&P 500", quantity: 24 },
+  { accountId: "pea", isin: "FR0011550193", name: "BNP Paribas Easy STOXX Europe 600", quantity: 10 },
+  { accountId: "pea", isin: "FR0013412020", name: "Amundi PEA Émergents", quantity: 3 },
+  { accountId: "pea", isin: "FR0013411980", name: "Amundi PEA Japon TOPIX", quantity: 2 },
+  { accountId: "pea", isin: "NL00150001Q9", name: "Stellantis", quantity: 5 },
+  { accountId: "pea", isin: "FR0000120073", name: "Air Liquide", quantity: 1 },
+  { accountId: "pea", isin: "FR0000120271", name: "TotalEnergies", quantity: 1 },
+  { accountId: "pea", isin: "FR0000124141", name: "Veolia", quantity: 1 },
+  { accountId: "cto", isin: "US29082A1079", name: "Embraer ADR", quantity: 4 },
+  { accountId: "cto", isin: "US0846707026", name: "Berkshire Hathaway B", quantity: 0.292877 },
+  { accountId: "cto", isin: "US5949181045", name: "Microsoft", quantity: 0.305488 },
+  { accountId: "cto", isin: "US92826C8394", name: "Visa", quantity: 0.151385 },
+  { accountId: "cto", isin: "US98419M1009", name: "Xylem", quantity: 1.014878 },
+  { accountId: "cto", isin: "IE00B4ND3602", name: "iShares Physical Gold ETC", quantity: 1 },
+];
+export type MovementStatus = "present" | "new" | "confirm" | "blocked";
+export function movementStatus(row: PreviewRow, category: ReviewCategory): MovementStatus {
+  if (row.status === "duplicate" || row.status === "existing-etf") return "present";
+  return category === "ready" ? "new" : category === "confirmation" ? "confirm" : "blocked";
+}
+
 export type ReviewCategory = "ready" | "confirmation" | "blocked";
 export function reviewCategory(row: PreviewRow, usualBrowserConfirmed: boolean): ReviewCategory {
   if (["duplicate", "existing-etf", "ignored"].includes(row.status)) return "blocked";
@@ -65,5 +88,12 @@ export function finalHistoryReview(sheets: ImportSheet[], options: ImportOptions
     }
     g.issues = [...new Set(g.issues)];
   }
-  return { rows, previews, quantities: [...groups.values()], counts: { ready: rows.filter(r => r.category === "ready").length, confirmation: rows.filter(r => r.category === "confirmation").length, blocked: rows.filter(r => r.category === "blocked").length } };
+  const references = REFERENCE_QUANTITIES.map(r => {
+    const g = groups.get(`${r.accountId}\u0000${r.isin}`);
+    const reconstructed = g?.reconstructedQuantity ?? null;
+    return { ...r, sourceQuantity: g?.sourceQuantity ?? null, reconstructedQuantity: reconstructed, matches: reconstructed !== null && Math.abs(reconstructed - r.quantity) < 1e-6 };
+  });
+  const statuses = rows.map(r => movementStatus(r, r.category));
+  const tally = (s: MovementStatus) => statuses.filter(x => x === s).length;
+  return { rows, previews, references, movementCounts: { present: tally("present"), new: tally("new"), confirm: tally("confirm"), blocked: tally("blocked"), duplicatesExcluded: rows.filter(r => r.status === "duplicate" || r.status === "existing-etf").length }, quantities: [...groups.values()], counts: { ready: rows.filter(r => r.category === "ready").length, confirmation: rows.filter(r => r.category === "confirmation").length, blocked: rows.filter(r => r.category === "blocked").length } };
 }

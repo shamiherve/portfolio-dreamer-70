@@ -68,4 +68,10 @@ describe("Final read-only historical preview", () => {
     const r = previewHistory(sheet, { ...options, accountId: "cto", broker: "trade-republic" }, initialPortfolio(), w, emptyLedger());
     expect(r.rows[1]?.status).toBe("review"); expect(r.rows[1]?.issues.join(" ")).toContain("n’est pas de 4 ADR"); expect(h.quantity).toBe(7);
   });
+});import { REFERENCE_QUANTITIES } from "./history-final-review";
+describe("Confirmed reference quantities", () => {
+  it("records 10 STOXX Europe 600 units and 4 Embraer ADR as controls", () => {
+    expect(REFERENCE_QUANTITIES.find(r => r.isin === "FR0011550193")?.quantity).toBe(10);
+    expect(REFERENCE_QUANTITIES.find(r => r.isin === "US29082A1079")?.quantity).toBe(4);
+  });
 });
