@@ -11,6 +11,7 @@ import { bankDefaults, auditSourceSheet } from "@/lib/history-source-audit";
 import { isConsolidatedSource, normalizeConsolidated } from "@/lib/history-consolidated";
 import { confirmedWorkbookOptions, finalHistoryReview } from "@/lib/history-final-review";
 import { FinalOverview } from "./final-overview";
+import { ConsolidatedImport } from "./consolidated-import";
 import { SourceReport } from "./source-report";
 
 const inputClass = "w-full rounded-md border border-input bg-surface px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring";
@@ -103,7 +104,7 @@ export function HistoryWorkbench() {
           <label className="block max-w-xs space-y-1 text-xs text-muted-foreground">Solde EUR constaté (facultatif)<input className={inputClass} aria-label="Solde espèces constaté" type="number" step="0.01" value={cashObserved} onChange={e => setCashObserved(e.target.value)} /></label>{cashObserved !== "" && Number.isFinite(Number(cashObserved)) && <p className="text-sm">Écart fichier complet − solde constaté : {money((sheet ? auditSourceSheet(sheet).balance : 0) - Number(cashObserved))} · espèces initiales et exhaustivité restent à vérifier ; aucun mouvement ajouté.</p>}
           {preview.split.issues.map(s => <p key={s} className="text-sm text-warning">{s}</p>)}
         </section>
-        <p role="status" className="border-y border-border py-4 text-sm font-medium">Aperçu uniquement. L’import définitif est désactivé dans cette étape ; aucune validation de l’aperçu n’enregistre d’opération.</p>
+        {finalReview && data && expected && <ConsolidatedImport review={finalReview} sheets={sheets} data={data} expected={expected} usualBrowser={usualBrowser} onDone={reload} />}
       </>}
     </section>
     <section className="space-y-4" aria-label="Grand livre enregistré"><h2 className="text-lg font-semibold">Grand livre enregistré</h2>{!ledgerEvents.length ? <p className="text-sm text-muted-foreground">Aucun événement historique importé.</p> : <><p className="text-xs text-muted-foreground">{ledgerEvents.length} événements · les 100 plus récents ci-dessous. L’export complet contient l’intégralité.</p><div className="overflow-x-auto"><table className="w-full min-w-[800px] text-left text-sm"><thead className="border-b border-border text-muted-foreground"><tr>{["Date / valeur", "Compte", "Opération", "Instrument", "Quantité", "Montant", "Source"].map(h => <th key={h} className="py-3">{h}</th>)}</tr></thead><tbody>{[...ledgerEvents].sort((a, b) => b.operationDate.localeCompare(a.operationDate)).slice(0, 100).map(e => <tr key={e.id} className="border-b border-border"><td className="py-3">{e.operationDate}<br /><span className="text-xs text-muted-foreground">{e.settlementDate ?? "—"}</span></td><td>{e.accountId.toUpperCase()}</td><td>{operationLabels[e.type]}</td><td>{e.instrumentName}<br /><span className="text-xs text-muted-foreground">{e.isin}</span></td><td className="font-mono">{e.quantity ?? "—"}</td><td className="font-mono">{money(e.amount, e.currency)}</td><td className="text-xs text-muted-foreground">{e.source.file} · {e.source.sheet} · ligne {e.source.row}</td></tr>)}</tbody></table></div></>}</section>
