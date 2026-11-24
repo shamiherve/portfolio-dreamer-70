@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Category } from "./rebalance";
 import { assertNoPendingTransaction, recoverLocalTransaction } from "./local-transaction";
+import { simulationsSchema, SIMULATIONS_KEY, makeId } from "./portfolio";
+import { notifyLocalData, subscribeLocalData } from "./local-data-events";
 
 export type Simulation = {
   id: string;
@@ -10,7 +12,7 @@ export type Simulation = {
   savedAt: number;
 };
 
-const STORAGE_KEY = "equilibre.simulations.v1";
+const STORAGE_KEY = SIMULATIONS_KEY;
 
 function read(): Simulation[] {
   if (typeof window === "undefined") return [];
@@ -19,9 +21,9 @@ function read(): Simulation[] {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as Simulation[]) : [];
+    return simulationsSchema.parse(parsed);
   } catch {
-    return [];
+    throw new Error("Simulations locales illisibles : données conservées, enregistrement bloqué.");
   }
 }
 
@@ -30,21 +32,21 @@ export function useSimulations() {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setSimulations(read());
-    setHydrated(true);
+    const refresh = () => { try { setSimulations(read()); setHydrated(true); } catch { setHydrated(false); } };
+    refresh(); return subscribeLocalData([STORAGE_KEY], refresh);
   }, []);
 
   const persist = useCallback((next: Simulation[]) => {
     assertNoPendingTransaction(window.localStorage);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    setSimulations(next);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(simulationsSchema.parse(next)));
+    notifyLocalData([STORAGE_KEY]);
   }, []);
 
   const save = useCallback(
     (sim: Omit<Simulation, "id" | "savedAt"> & { id?: string }) => {
       const now = Date.now();
       const current = read();
-      const id = sim.id ?? `sim-${now}-${Math.floor(now % 100000)}`;
+      const id = sim.id ?? makeId();
       const entry: Simulation = {
         id,
         name: sim.name.trim() || "Simulation sans nom",

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Portfolio } from "./portfolio";
 import type { Wealth } from "./wealth";
+import type { FinancialRegistry } from "./financial-registry";
 
 export const LEDGER_KEY = "equilibre.ledger.v1";
 export const operationTypes = ["deposit", "withdrawal", "buy", "sell", "dividend", "fee", "tax", "split", "transfer_in", "transfer_out", "corporate_action"] as const;
@@ -19,7 +20,7 @@ export const eventSchema = z.object({
   quantity: amount.nullable(), executionPrice: amount.nullable(), amount, fees: amount, taxes: amount, withholding: amount,
   currency: z.string().regex(/^[A-Z]{3}$/), fxRate: z.number().finite().positive().nullable(),
   splitRatio: z.number().finite().positive().nullable(), transferId: z.string().nullable(),
-  source: z.object({ broker: z.enum(["fortuneo", "trade-republic"]), file: z.string(), sheet: z.string(), row: z.number().int().positive(), reference: z.string(), importedAt: z.string().datetime(), origin: z.enum(["import", "manual"]).optional(), originalColumns: z.array(z.object({ heading: z.string(), value: z.string() }).strict()).optional() }).strict(),
+  source: z.object({ broker: z.enum(["fortuneo", "trade-republic", "manual"]), file: z.string(), sheet: z.string(), row: z.number().int().positive(), reference: z.string(), importedAt: z.string().datetime(), origin: z.enum(["import", "manual"]).optional(), positionApplied: z.boolean().optional(), originalColumns: z.array(z.object({ heading: z.string(), value: z.string() }).strict()).optional() }).strict(),
 }).strict().superRefine((e, ctx) => {
   const issue = (message: string) => ctx.addIssue({ code: "custom", message });
   if (["buy", "sell"].includes(e.type) && (!e.isin || !e.quantity || (e.executionPrice !== null && e.executionPrice <= 0) || e.amount <= 0)) issue("Achat/vente incomplet : ISIN, quantité et montant requis ; un prix indisponible reste null.");
@@ -37,8 +38,9 @@ export function readLedger(storage: Pick<Storage, "getItem">): Ledger {
 }
 /** User-confirmed (24/11/2026) closed historical instruments: ledger identity only, never a position. */
 export const HISTORICAL_INSTRUMENTS = [{ id: "hist:amundi-cac40", accountId: "pea", isin: "FR0007052782", name: "Amundi CAC 40 UCITS ETF - EUR DIS" }] as const;
-export function instruments(portfolio: Portfolio, wealth: Wealth) {
-  return [...HISTORICAL_INSTRUMENTS.filter(h => !portfolio.positions.some(p => p.isin === h.isin) && !wealth.holdings.some(w => w.accountId === h.accountId && w.isin === h.isin)),...portfolio.positions.map(p => ({ id: `etf:${p.id}`, accountId: "pea", isin: p.isin, name: p.name })), ...wealth.holdings.map(h => ({ id: `w:${h.id}`, accountId: h.accountId, isin: h.isin, name: h.name }))];
+export function instruments(portfolio: Portfolio, wealth: Wealth, registry?: FinancialRegistry) {
+  const existing = [...HISTORICAL_INSTRUMENTS.filter(h => !portfolio.positions.some(p => p.isin === h.isin) && !wealth.holdings.some(w => w.accountId === h.accountId && w.isin === h.isin)),...portfolio.positions.map(p => ({ id: `etf:${p.id}`, accountId: "pea", isin: p.isin, name: p.name })), ...wealth.holdings.map(h => ({ id: `w:${h.id}`, accountId: h.accountId, isin: h.isin, name: h.name }))];
+  return [...existing.map(i => ({ ...i, name: registry?.instruments.find(x => x.legacyRef === i.id)?.name ?? i.name })), ...(registry?.instruments.filter(i => !i.legacyRef).map(i => ({ id: i.id, accountId: i.accountId, isin: i.isin, name: i.name })) ?? [])];
 }
 // Exact economic key excludes file/line and UI labels so retrying another export cannot duplicate cash.
 export function eventKey(e: LedgerEvent) {

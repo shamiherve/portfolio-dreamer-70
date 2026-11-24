@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, Trash2, Download, Upload, ArrowUpRight, Save, RefreshCw } from "lucide-react";
 import { usePortfolio } from "@/lib/use-portfolio";
 import { useQuotes } from "@/lib/use-quotes";
-import { exportBackup, makeId, parseBackup, purchaseProposal, recordTransaction, SIMULATIONS_KEY, type Backup, type Position } from "@/lib/portfolio";
+import { exportBackup, parseBackup, purchaseProposal, SIMULATIONS_KEY, type Backup, type Position } from "@/lib/portfolio";
 import { eur, pct, pp } from "@/lib/rebalance";
 import { downloadJson } from "./target-editor";
 import { PurchasePlanner } from "./purchase-planner";
@@ -45,11 +45,6 @@ export function Dashboard() {
   const file = useRef<HTMLInputElement>(null);
   const proposal = purchaseProposal(portfolio.positions, portfolio.budget);
   const result = proposal.continuous;
-  const [transactionPosition, setTransactionPosition] = useState("");
-  const [transactionType, setTransactionType] = useState<"buy" | "sell">("buy");
-  const [transactionQuantity, setTransactionQuantity] = useState("");
-  const [transactionPrice, setTransactionPrice] = useState("");
-  const [transactionDate, setTransactionDate] = useState("");
   const currentMaxGap = Math.max(0, ...result.lines.map((line) => Math.abs(line.currentWeight - line.target)));
   const active = portfolio.targets.find((t) => t.id === portfolio.activeTargetId);
   const run = (fn: () => void, success?: string) => {
@@ -81,10 +76,7 @@ export function Dashboard() {
       <div><p className="text-xs text-muted-foreground">Dernière mise à jour du flux réussie</p><p className="mt-2 text-sm">{timestamp(portfolio.feedUpdatedAt)}</p><p className="mt-1 text-[11px] text-muted-foreground">Dernière lecture réussie : {timestamp(portfolio.quotesCheckedAt)}</p><p className="mt-1 text-[11px] text-muted-foreground">Dernière modification du portefeuille : {timestamp(portfolio.updatedAt)}</p></div>
       <div><p className="text-xs text-muted-foreground">Écart maximal actuel</p><p className="mt-2 font-mono text-2xl">{proposal.valid ? `${currentMaxGap.toFixed(2)} pp` : "—"}</p><p className="mt-1 text-xs text-muted-foreground">Hors liquidités · Avant les achats proposés</p></div>
     </section>
-    <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-base font-semibold">Positions détenues</h2><Button disabled={!hydrated} variant="outline" size="sm" onClick={() => run(() => {
-      const p: Position = { id: makeId(), name: "Nouvel ETF", isin: "", quantity: 0, price: null, priceDate: null, target: 0 };
-      commit({ ...portfolio, positions: [...portfolio.positions, p], activeTargetId: null, updatedAt: new Date().toISOString() }); setEditing(p.id);
-    })}><Plus />Ajouter un ETF</Button></div>
+    <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-base font-semibold">Positions détenues</h2><Button asChild variant="outline" size="sm"><Link to="/gestion"><Plus />Gérer mes instruments</Link></Button></div>
     <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-border bg-surface-muted/50 text-[11px] text-muted-foreground"><tr><th className="px-3 py-3">ETF / ISIN</th><th className="px-3 text-right">Parts</th><th className="px-3 text-right">Cours / date</th><th className="px-3 text-right">Valeur</th><th className="px-3 text-right">Réel</th><th className="px-3 text-right">Cible</th><th className="px-3 text-right">Écart</th><th /></tr></thead><tbody>
       {portfolio.positions.map((p, i) => { const line = result.lines[i]; return <tr key={p.id} className="border-b border-border"><td className="min-w-48 px-3 py-4"><Button className="h-auto max-w-80 whitespace-normal p-0 text-left text-sm" variant="link" disabled={!hydrated} onClick={() => setEditing(p.id)}>{p.name}</Button><span className="mt-1 block font-mono text-[10px] text-muted-foreground">{p.isin || "ISIN non renseigné"}</span></td><td className="px-3 text-right font-mono">{p.quantity}</td><td className="min-w-28 px-3 text-right font-mono text-xs">{p.price === null ? "Non renseigné" : eur(p.price)}<span className="mt-1 block text-[10px] text-muted-foreground">{p.priceDate ?? "Date absente"}</span></td><td className="whitespace-nowrap px-3 text-right font-mono text-xs">{p.quantity > 0 && p.price === null ? "—" : eur(line?.value ?? 0)}</td><td className="px-3 text-right font-mono text-xs">{proposal.missingValuation ? "—" : pct(line?.currentWeight ?? 0)}</td><td className="px-3 text-right font-mono text-xs">{pct(p.target)}</td><td className="whitespace-nowrap px-3 text-right font-mono text-xs text-muted-foreground">{proposal.missingValuation ? "—" : pp((line?.currentWeight ?? 0) - p.target)}</td><td className="px-2"><Button title={`Supprimer ${p.name}`} aria-label={`Supprimer ${p.name}`} disabled={!hydrated} variant="ghost" size="icon" onClick={() => {
         if (window.confirm(`Supprimer ${p.name} des positions ? Son historique de transactions sera conservé.`)) run(() => commit({ ...portfolio, positions: portfolio.positions.filter((pos) => pos.id !== p.id), activeTargetId: null, updatedAt: new Date().toISOString() }));
@@ -98,19 +90,7 @@ export function Dashboard() {
     </section>
     {hydrated && <PurchasePlanner portfolio={portfolio} />}
     <section className="space-y-5 border-t border-border pt-7"><h2 className="font-semibold">Historique des transactions</h2>
-      <form className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-6" onSubmit={(e) => { e.preventDefault(); run(() => {
-        const p = portfolio.positions.find((i) => i.id === transactionPosition); if (!p) throw new Error("Choisissez un ETF.");
-        commit(recordTransaction(portfolio, { id: makeId(), positionId: p.id, name: p.name, type: transactionType, quantity: Number(transactionQuantity), price: Number(transactionPrice), date: transactionDate }));
-        setTransactionQuantity(""); setTransactionPrice("");
-      }, "Transaction enregistrée ; nombre de parts mis à jour."); }}>
-        <label className="space-y-1 text-xs text-muted-foreground">ETF<select required className={field} value={transactionPosition} onChange={(e) => setTransactionPosition(e.target.value)}><option value="">Choisir</option>{portfolio.positions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-        <label className="space-y-1 text-xs text-muted-foreground">Opération<select className={field} value={transactionType} onChange={(e) => setTransactionType(e.target.value === "sell" ? "sell" : "buy")}><option value="buy">Achat</option><option value="sell">Vente</option></select></label>
-        <label className="space-y-1 text-xs text-muted-foreground">Parts<input required className={field} type="number" min="0.000001" step="any" value={transactionQuantity} onChange={(e) => setTransactionQuantity(e.target.value)} /></label>
-        <label className="space-y-1 text-xs text-muted-foreground">Prix unitaire (€)<input required className={field} type="number" min="0.000001" step="any" value={transactionPrice} onChange={(e) => setTransactionPrice(e.target.value)} /></label>
-        <label className="space-y-1 text-xs text-muted-foreground">Date<input required className={field} type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} /></label>
-        <Button type="submit" disabled={!hydrated} size="sm"><Plus />Enregistrer</Button>
-      </form>
-      <p className="text-[11px] text-muted-foreground">Une transaction ajuste les parts détenues ; son prix d’exécution ne remplace pas le dernier cours connu.</p>
+      <Button asChild size="sm" variant="outline"><Link to="/historique"><Plus />Ajouter une opération dans Historique</Link></Button>
       {!portfolio.transactions.length && <p className="text-sm text-muted-foreground">Aucune transaction enregistrée.</p>}
       <ul className="divide-y divide-border">{portfolio.transactions.map((t) => <li key={t.id} className="flex flex-wrap justify-between gap-3 py-3 text-sm"><span><span className={t.type === "buy" ? "text-success" : "text-destructive"}>{t.type === "buy" ? "Achat" : "Vente"}</span> · {t.name}<span className="mt-1 block text-xs text-muted-foreground">{t.date}</span></span><span className="font-mono text-xs">{t.quantity} parts × {eur(t.price)} = {eur(t.quantity * t.price)}</span></li>)}</ul>
     </section>

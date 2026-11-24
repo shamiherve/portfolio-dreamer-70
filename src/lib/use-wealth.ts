@@ -1,25 +1,32 @@
-import { useEffect, useRef, useState } from "react";
+import { useMemo } from "react";
 import { initialWealth, renameAccounts, renameClasses, wealthSchema, WEALTH_KEY, type Wealth } from "./wealth";
-import { assertNoPendingTransaction, recoverLocalTransaction } from "./local-transaction";
+import { initialPortfolio, portfolioSchema, PORTFOLIO_KEY } from "./portfolio";
+import { assertNoPendingTransaction } from "./local-transaction";
+import { readLedger } from "./ledger";
+import { readRegistry } from "./financial-registry";
+import { useFinancialRegistry } from "./use-financial-registry";
+import { wealthLabels } from "./canonical-labels";
+import { assertNoNewIdentityIssues, assertWealthChange } from "./business-guards";
+import { useLocalRecord } from "./use-local-record";
+import { notifyLocalData } from "./local-data-events";
 
-/** Separate local key: never touches the ETF portfolio record. */
 export function useWealth() {
-  const [wealth, setWealth] = useState<Wealth>(initialWealth);
-  const [hydrated, setHydrated] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const current = useRef(wealth);
-  const [readOnly, setReadOnly] = useState(false);
-  useEffect(() => {
-    try { recoverLocalTransaction(localStorage); const raw = localStorage.getItem(WEALTH_KEY); if (raw) { const w = renameAccounts(renameClasses(wealthSchema.parse(JSON.parse(raw)))); localStorage.setItem(WEALTH_KEY, JSON.stringify(w)); current.current = w; setWealth(w); } }
-    catch { setReadOnly(true); setError("Les données patrimoniales locales sont illisibles ; elles n’ont pas été remplacées."); }
-    setHydrated(true);
-  }, []);
+  const local = useLocalRecord(WEALTH_KEY, initialWealth, raw => wealthSchema.parse(raw), "Les données patrimoniales locales sont illisibles ; elles n’ont pas été remplacées.");
+  const registry = useFinancialRegistry();
+  const wealth = useMemo(() => wealthLabels(renameAccounts(renameClasses(local.value)), registry.registry), [local.value, registry.registry]);
   function commit(next: (w: Wealth) => Wealth) {
-    if (!hydrated || readOnly) throw new Error("Enregistrement indisponible.");
+    if (!local.ready || local.error || registry.error) throw new Error("Enregistrement indisponible.");
     assertNoPendingTransaction(localStorage);
-    const checked = wealthSchema.parse({ ...next(current.current), updatedAt: new Date().toISOString() });
+    const raw = localStorage.getItem(WEALTH_KEY);
+    const before = raw === null ? initialWealth() : wealthSchema.parse(JSON.parse(raw));
+    const checked = wealthSchema.parse({ ...next(before), updatedAt: new Date().toISOString() });
+    const praw = localStorage.getItem(PORTFOLIO_KEY);
+    const p = praw === null ? initialPortfolio() : portfolioSchema.parse(JSON.parse(praw));
+    const r = readRegistry(localStorage);
+    assertWealthChange(before, checked, readLedger(localStorage).events);
+    assertNoNewIdentityIssues({ p, w: before, r }, { p, w: checked, r });
     localStorage.setItem(WEALTH_KEY, JSON.stringify(checked));
-    current.current = checked; setWealth(checked);
+    notifyLocalData([WEALTH_KEY]);
   }
-  return { wealth, hydrated, error, commit };
+  return { wealth, hydrated: local.ready && registry.ready, error: local.error ?? registry.error, commit };
 }

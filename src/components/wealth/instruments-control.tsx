@@ -10,6 +10,10 @@ import { holdingValue, type Holding } from "@/lib/wealth";
 import { eur } from "@/lib/rebalance";
 import { field } from "./shared";
 import { QuoteStatusPanel } from "./quote-status";
+import { useFinancialRegistry } from "@/lib/use-financial-registry";
+import { visibleAccounts, registryLines, latestValuation } from "@/lib/financial-registry";
+import { identityIssues } from "@/lib/business-guards";
+import { Link } from "@tanstack/react-router";
 
 const ts = (s: string | null | undefined) => s ? new Date(s).toLocaleString("fr-FR", { timeZone: "Europe/Paris" }) : "—";
 const META = { verified: "Vérifié", corrected: "Corrigé automatiquement", manual: "Vérification manuelle requise", none: "Aucune donnée de marché" } as const;
@@ -22,16 +26,18 @@ interface Row { id: string; name: string; isin: string; ticker: string; exchange
 export function InstrumentsControl() {
   const { portfolio, hydrated } = usePortfolio();
   const { wealth, hydrated: wh, error, commit } = useWealth();
+  const { registry, ready: rr, error: re } = useFinancialRegistry();
   const market = useMarket(wealth, wh && !error, commit);
   const [filters, setFilters] = useState({ account: "", exchange: "", provider: "", status: "" });
   const [sort, setSort] = useState<keyof Row>("name");
   const [symbolDraft, setSymbolDraft] = useState<Record<string, string>>({});
-  const accName = (id: string) => wealth.accounts.find(a => a.id === id)?.name ?? id;
+  const accName = (id: string) => visibleAccounts(registry, wealth).find(a => a.id === id)?.name ?? wealth.accounts.find(a => a.id === id)?.name ?? id;
   const rows: Row[] = useMemo(() => [
     ...portfolio.positions.map(p => ({ id: `etf:${p.id}`, name: p.name, isin: p.isin, ticker: "", exchange: "Euronext Paris", account: accName("pea"), currency: "EUR", price: p.price, value: p.quantity * (p.price ?? 0), provider: p.priceSource === "euronext" ? PROV.euronext : PROV.manual, updated: p.quoteUpdatedAt ?? p.priceDate, meta: "verified" as const, quote: (p.priceSource === "euronext" ? "ok" : "manual") as Row["quote"] })),
     ...wealth.holdings.map(h => { const m = marketOf(h); return { id: h.id, name: h.name, isin: h.isin, ticker: h.ticker, exchange: h.exchange, account: accName(h.accountId), currency: h.currency, price: h.kind === "value" ? null : h.price, value: holdingValue(h), provider: h.kind === "value" ? PROV.manual : m.priceMode === "manual" ? PROV.manual : PROV[m.provider], updated: m.quote?.timestamp ?? h.priceDate, meta: m.status, quote: m.quoteStatus, h }; }),
-  ], [portfolio, wealth]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!hydrated || !wh) return <p className="p-8">Chargement des données locales…</p>;
+    ...registry.instruments.filter(i => !i.legacyRef).map(i => { const v = latestValuation(registry, i.id, new Date().toISOString().slice(0, 10)); const included = registryLines(registry, wealth, new Date().toISOString().slice(0, 10)).some(l => l.instrument.id === i.id); return { id: i.id, name: i.name, isin: i.isin, ticker: v?.quote?.symbol ?? i.ticker, exchange: v?.quote?.exchange ?? i.exchange, account: accName(i.accountId), currency: i.currency, price: v?.quote?.price ?? null, value: included ? v?.value ?? 0 : 0, provider: v?.origin === "quote" ? "Cours vérifié (Gestion)" : PROV.manual, updated: v?.date ?? null, meta: "manual" as const, quote: (v ? "manual" : "none") as Row["quote"] }; }),
+  ], [portfolio, wealth, registry]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!hydrated || !wh || !rr) return <p className="p-8">Chargement des données locales…</p>;
   const shown = rows.filter(r => (!filters.account || r.account === filters.account) && (!filters.exchange || r.exchange === filters.exchange) && (!filters.provider || r.provider === filters.provider) && (!filters.status || META[r.meta] === filters.status || QS[r.quote] === filters.status))
     .sort((a, b) => String(a[sort] ?? "").localeCompare(String(b[sort] ?? ""), "fr", { numeric: true }));
   const opts = (k: keyof Row) => [...new Set(rows.map(r => String(r[k])).filter(Boolean))];
@@ -40,7 +46,8 @@ export function InstrumentsControl() {
   return <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
     <header><p className="text-xs uppercase tracking-wide text-muted-foreground">Données de marché</p><h1 className="text-2xl font-semibold">Contrôle des instruments</h1>
       <p className="mt-1 max-w-3xl text-sm text-muted-foreground">L’ISIN est l’identifiant principal. Une correction n’est appliquée que si la cotation est certaine ; sinon la ligne est signalée et aucun cours n’est appliqué. Les quantités et l’historique ne sont jamais modifiés.</p></header>
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {(error || re) && <p role="alert" className="text-sm text-destructive">{error ?? re}</p>}
+    {identityIssues(portfolio, wealth, registry).map(i => <p role="alert" className="text-sm text-warning" key={i}>Identité dupliquée à vérifier : {i}. Aucune fusion appliquée.</p>)}
     <QuoteStatusPanel portfolio={portfolio} wealth={wealth} onRefresh={() => void market.refresh()} busy={market.busy !== null} message={market.message} />
 
     <section className="space-y-3"><h2 className="text-lg font-semibold">Instruments et cours</h2>
@@ -82,6 +89,7 @@ export function InstrumentsControl() {
           <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={m.priceMode === "manual"} onChange={e => save(w => setMarketOption(w, h.id, { priceMode: e.target.checked ? "manual" : "auto" }))} />Cours manuel (les cours automatiques sont affichés mais jamais appliqués)</label>
         </div>}
       </article>; })}
+      <Button asChild variant="link" className="p-0"><Link to="/gestion">Gérer les nouveaux instruments et leurs valorisations</Link></Button>
       <p className="text-xs text-muted-foreground">Pour corriger la place de cotation, l’ISIN ou la devise d’une ligne, utilisez « Modifier » dans Positions individuelles puis actualisez.</p>
     </section>
   </main>;

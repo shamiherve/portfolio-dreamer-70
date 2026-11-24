@@ -10,7 +10,7 @@ import { eur } from "@/lib/rebalance";
 import { field } from "./shared";
 import { AdditionalFinancial } from "./additional-financial";
 
-const blank = (w: Wealth): Holding => ({ id: makeId(), name: "", isin: "", ticker: "", exchange: "", accountId: w.accounts.find(a => a.id === "cto")?.id ?? w.accounts[0]!.id, classId: w.classes.find(c => c.id === "stocks")?.id ?? w.classes[0]!.id, kind: "quantity", currency: "EUR", quantity: 0, price: null, fxRate: 1, fractional: false, value: 0, priceDate: null });
+const blank = (w: Wealth): Holding => ({ id: makeId(), name: "", isin: "", ticker: "", exchange: "", accountId: w.accounts.find(a => a.id === "cto")?.id ?? w.accounts[0]?.id ?? "cto", classId: w.classes.find(c => c.id === "stocks")?.id ?? w.classes[0]?.id ?? "stocks", kind: "quantity", currency: "EUR", quantity: 0, price: null, fxRate: 1, fractional: false, value: 0, priceDate: null });
 const num = (s: string) => s.trim() === "" ? NaN : Number(s.replace(",", "."));
 
 function L({ t, children }: { t: string; children: React.ReactNode }) { return <label className="space-y-1 text-xs text-muted-foreground">{t}{children}</label>; }
@@ -50,13 +50,14 @@ export function PositionsManager() {
   const [editing, setEditing] = useState<Holding | null>(null);
   const [msg, setMsg] = useState("");
   if (!hydrated || !wh) return <p className="p-8">Chargement des données locales…</p>;
-  const lines = unifiedLines(portfolio, wealth);
-  const total = lines.reduce((s, l) => s + l.value, 0);
+  const allLines = unifiedLines(portfolio, wealth);
+  const lines = allLines.filter(l => l.source !== "etf");
+  const total = allLines.reduce((s, l) => s + l.value, 0);
   const n = (id: string, list: { id: string; name: string }[]) => list.find(x => x.id === id)?.name ?? id;
-  const save = (input: Holding) => { const before = wealth.holdings.find(x => x.id === input.id); const manualEdit = before?.market && before.market.priceMode === "auto" && before.kind === "quantity" && before.price !== input.price; const h = manualEdit ? { ...input, market: { ...before.market!, priceMode: "manual" as const, quoteStatus: "manual" as const } } : input; try { commit(w => ({ ...w, holdings: w.holdings.some(x => x.id === h.id) ? w.holdings.map(x => x.id === h.id ? h : x) : [...w.holdings, h] })); setEditing(null); setMsg(manualEdit ? "Position enregistrée. Cours saisi à la main : la ligne passe en cours manuel (réactivable dans Contrôle des instruments)." : "Position enregistrée."); } catch (e) { setMsg(e instanceof Error ? e.message : "Enregistrement impossible."); } };
+  const save = (input: Holding) => { const before = wealth.holdings.find(x => x.id === input.id); const beforeMarket = before?.market; const manualEdit = beforeMarket && beforeMarket.priceMode === "auto" && before.kind === "quantity" && before.price !== input.price; const h = manualEdit && beforeMarket ? { ...input, market: { ...beforeMarket, priceMode: "manual" as const, quoteStatus: "manual" as const } } : input; try { commit(w => ({ ...w, holdings: w.holdings.some(x => x.id === h.id) ? w.holdings.map(x => x.id === h.id ? h : x) : [...w.holdings, h] })); setEditing(null); setMsg(manualEdit ? "Position enregistrée. Cours saisi à la main : la ligne passe en cours manuel (réactivable dans Contrôle des instruments)." : "Position enregistrée."); } catch (e) { setMsg(e instanceof Error ? e.message : "Enregistrement impossible."); } };
   return <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
     <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted-foreground">Toutes enveloppes</p><h1 className="text-2xl font-semibold">Positions individuelles</h1></div>
-      <Button size="sm" onClick={() => setEditing(blank(wealth))}><Plus />Ajouter une position</Button></header>
+      <Button size="sm" asChild><Link to="/gestion"><Plus />Gérer mes instruments</Link></Button></header>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {editing && <HoldingForm key={editing.id} initial={editing} wealth={wealth} onSave={save} onCancel={() => setEditing(null)} />}
     {msg && <p className="text-sm text-muted-foreground" role="status">{msg}</p>}
@@ -72,9 +73,10 @@ export function PositionsManager() {
         <td className="px-2 py-2 font-mono">{eur(l.value)}</td>
         <td className="px-2 py-2 text-right">{etf ? <Link to="/" className="text-xs underline">Gérer</Link> : h && <span className="inline-flex gap-1"><Button size="icon" variant="ghost" aria-label={`Modifier ${l.name}`} onClick={() => setEditing(h)}><Pencil /></Button><Button size="icon" variant="ghost" aria-label={`Supprimer ${l.name}`} onClick={() => { if (confirm(`Supprimer « ${l.name} » ?`)) { commit(w => ({ ...w, holdings: w.holdings.filter(x => x.id !== h.id) })); setMsg("Position supprimée."); } }}><Trash2 /></Button></span>}</td>
       </tr>; })}</tbody>
-      <tfoot><tr><td colSpan={8} className="px-2 py-2 font-medium">Total (chaque position comptée une fois)</td><td className="px-2 py-2 font-mono font-medium">{eur(total)}</td><td /></tr></tfoot>
+      <tfoot><tr><td colSpan={8} className="px-2 py-2 font-medium">Total des positions individuelles</td><td className="px-2 py-2 font-mono font-medium">{eur(lines.reduce((s, l) => s + l.value, 0))}</td><td /></tr></tfoot>
     </table></div>
-    <p className="text-xs text-muted-foreground">Les ETF proviennent directement du Portefeuille ETF (source unique) ; les autres cours sont saisis manuellement.</p>
-    <AdditionalFinancial wealth={wealth} legacyTotal={total} />
+    <p className="text-xs text-muted-foreground">Les ETF sont consultables dans le Portefeuille ETF ; les nouveaux supports ci-dessous proviennent de Gestion.</p>
+    <Button asChild variant="link" className="p-0"><Link to="/">Consulter les ETF détenus</Link></Button>
+    <AdditionalFinancial wealth={wealth} />
   </main>;
 }

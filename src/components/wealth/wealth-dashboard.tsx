@@ -54,18 +54,18 @@ export function WealthDashboard() {
     </header>
     <QuoteStatusPanel portfolio={portfolio} wealth={wealth} busy={market.busy !== null || quotes.loading} message={[market.message, quotes.status].filter(Boolean).join(" ")} onRefresh={() => { void quotes.refresh(); void market.refresh(); }} />
     {(error || we) && <p role="alert" className="text-sm text-destructive">{error ?? we}</p>}
-    {a.issues.length > 0 && <div role="alert" className="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm"><p className="flex items-center gap-2 font-medium"><AlertTriangle className="size-4" />Cibles incohérentes — résultats à interpréter avec prudence</p><ul className="ml-6 list-disc">{a.issues.map(i => <li key={i}>{i}</li>)}</ul><Link to="/allocation" className="underline">Corriger les cibles</Link></div>}
+    {a.issues.length > 0 && <div role="alert" className="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm"><p className="flex items-center gap-2 font-medium"><AlertTriangle className="size-4" />Cibles incohérentes — résultats à interpréter avec prudence</p><ul className="ml-6 list-disc">{a.issues.map(i => <li key={i}>{i}</li>)}</ul><Link to="/allocation" className="underline">Consulter les cibles figées</Link></div>}
     {a.unvalued.length > 0 && <p className="text-sm text-warning">Positions sans cours, comptées à 0 € : {a.unvalued.join(", ")}.</p>}
 
     <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Stat label="Valeur totale" value={eur(a.total)} />
+      <Stat label="Valeur du périmètre d’allocation" value={eur(a.total)} />
       <Stat label="Score d’équilibre global" value={scoreText(a.score)} hint={a.score === null ? "Portefeuille vide" : scoreLabel(a.score)} />
       <Stat label="Écart global (classes)" value={`${overall.toFixed(1)} pp`} hint="½ Σ |écart| par classe" />
       <Stat label="Scores détaillés" value={`${scoreText(a.classScore)} · ${scoreText(a.accountScore)}`} hint="Classes d’actifs · Comptes" />
       {a.accountRows.map(r => <Stat key={r.id} label={r.name} value={eur(r.value)} hint={`${fmtPct(r.actual)} actuel · cible ${fmtPct(r.target)}`} />)}
     </section>
     <WealthEvolution portfolio={portfolio} wealth={wealth} />
-    <AdditionalFinancial wealth={wealth} legacyTotal={a.total} />
+    <AdditionalFinancial wealth={wealth} />
     {causes.length > 0 && <p className="text-sm text-muted-foreground">Principales causes d’écart : {causes.map(c => `${c.name} (${fmtPp(c.diffPp)})`).join(" ; ")}.</p>}
 
     <section className="space-y-3"><h2 className="text-lg font-semibold">Allocation</h2>
@@ -78,7 +78,7 @@ export function WealthDashboard() {
       {a.parents.map(p => <p key={p.id} className="text-sm"><strong>{p.name}</strong> (catégorie parente, non additionnée) : cible {fmtPct(p.target)} · actuel {fmtPct(p.actual)} · {eur(p.value)} = {p.children.map(c => name(c, wealth.classes)).join(" + ")}</p>)}
     </section>
 
-    <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Cible vs actuel — classes d’actifs</h2><Link to="/allocation" className="text-sm underline">Modifier les cibles</Link></div>
+    <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Cible vs actuel — classes d’actifs</h2><Link to="/allocation" className="text-sm underline">Consulter les cibles</Link></div>
       <AllocationTable label="Classe d’actifs" rows={a.classRows}>{r => { const c = wealth.classes.find(x => x.id === r.id); return c?.parent ? <span className="pl-4 before:mr-1 before:content-['↳']">{r.name}</span> : r.name; }}</AllocationTable></section>
     <section className="space-y-3"><h2 className="text-lg font-semibold">Cible vs actuel — comptes</h2><AllocationTable label="Compte" rows={a.accountRows} /></section>
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { notifyLocalData } from "./local-data-events";
 
 export const DATA_KEYS = ["equilibre.portfolio.v1", "equilibre.wealth.v1", "equilibre.simulations.v1", "equilibre.theme.v1", "equilibre.ledger.v1", "equilibre.financial-registry.v1", "equilibre.snapshots.v1"] as const;
 export const SAFETY_KEY = "equilibre.safety-backup.v1";
@@ -43,4 +44,5 @@ export function atomicLocalWrite(storage: LocalStorageAccess, values: Record<str
   }
   // Committed journals can be safely cleared on next hydration if cleanup is temporarily unavailable.
   try { storage.removeItem(JOURNAL_KEY); } catch { /* committed, never roll back */ }
+  notifyLocalData(Object.keys(values));
 }

@@ -34,11 +34,11 @@ export function parseRestoration(raw: string): Restoration {
   const { ledger, financialRegistry, snapshots, ...base } = b as Record<string, unknown>;
   const checked = ledgerSchema.parse(ledger);
   const previous = parseFullBackup(JSON.stringify({ ...base, version: 1 }));
-  const accounts = new Set(previous.wealth.accounts.map(a => a.id));
+  const extras: { financialRegistry?: FinancialRegistry; snapshots?: Snapshots } = {};
+  if (financialRegistry !== undefined) extras.financialRegistry = validateRegistry(financialRegistry, previous.portfolio, previous.wealth, true);
+  const accounts = new Set([...previous.wealth.accounts.map(a => a.id), ...(extras.financialRegistry?.accounts.map(a => a.id) ?? [])]);
   if (checked.events.some(e => !accounts.has(e.accountId))) throw new Error("Grand livre : compte inconnu.");
   // Historical ISINs/instrument ids are independent and may refer to sold/deleted positions.
-  const extras: { financialRegistry?: FinancialRegistry; snapshots?: Snapshots } = {};
-  if (financialRegistry !== undefined) extras.financialRegistry = validateRegistry(financialRegistry, previous.portfolio, previous.wealth);
   if (snapshots !== undefined) extras.snapshots = snapshotsSchema.parse(snapshots);
   return { kind: "complete-v2", backup: { ...previous, ...extras, version: 2, ledger: checked } };
 }
@@ -50,14 +50,14 @@ export function restoreBackup(storage: LocalStorageAccess, pending: Restoration,
   const values: Record<string, string | null> = { [PORTFOLIO_KEY]: JSON.stringify(b.portfolio), [SIMULATIONS_KEY]: JSON.stringify(b.simulations) };
   // Absent extension sections have an explicit non-destructive legacy scope.
   const incomingRegistry = checked.kind === "complete-v2" ? checked.backup.financialRegistry : undefined;
-  validateRegistry(incomingRegistry ?? readRegistry(storage), b.portfolio, checked.kind === "etf-v1" ? safety.backup.wealth : checked.backup.wealth);
+  validateRegistry(incomingRegistry ?? readRegistry(storage), b.portfolio, checked.kind === "etf-v1" ? safety.backup.wealth : checked.backup.wealth, true);
   values[REGISTRY_KEY] = incomingRegistry ? JSON.stringify(incomingRegistry) : storage.getItem(REGISTRY_KEY);
   values[SNAPSHOTS_KEY] = checked.kind === "complete-v2" && checked.backup.snapshots ? JSON.stringify(checked.backup.snapshots) : storage.getItem(SNAPSHOTS_KEY);
   if (checked.kind !== "etf-v1") {
     values[WEALTH_KEY] = JSON.stringify(checked.backup.wealth); values[THEME_STORAGE_KEY] = checked.backup.theme;
     values[LEDGER_KEY] = checked.kind === "complete-v2" ? JSON.stringify(checked.backup.ledger) : storage.getItem(LEDGER_KEY);
     // A legacy file cannot delete or silently orphan the independent ledger.
-    if (checked.kind === "complete-v1" && readLedger(storage).events.some(e => !checked.backup.wealth.accounts.some(a => a.id === e.accountId))) throw new Error("Sauvegarde v1 incompatible avec les comptes du grand livre actuel.");
+    if (checked.kind === "complete-v1" && readLedger(storage).events.some(e => !checked.backup.wealth.accounts.some(a => a.id === e.accountId) && !readRegistry(storage).accounts.some(a => a.id === e.accountId))) throw new Error("Sauvegarde v1 incompatible avec les comptes du grand livre actuel.");
   }
   atomicLocalWrite(storage, values, safety.content, expected);
   return safety;
@@ -65,13 +65,13 @@ export function restoreBackup(storage: LocalStorageAccess, pending: Restoration,
 export function appendLedger(storage: LocalStorageAccess, ledger: Ledger, expected: Record<string, string | null>) {
   const safety = readCompleteBackup(storage);
   const next = ledgerSchema.parse(ledger);
-  generateCompleteBackup({ ...safety.backup, version: 1 }, next);
+  generateCompleteBackup({ ...safety.backup, version: 1 }, next, { ...(safety.backup.financialRegistry ? { financialRegistry: safety.backup.financialRegistry } : {}) });
   const keys = next.events.map(eventKey);
   const refs = next.events.flatMap(e => { const key = referenceKey(e); return key ? [key] : []; });
   if (new Set(keys).size !== keys.length || new Set(refs).size !== refs.length) throw new Error("Doublons dans le grand livre : enregistrement refusé.");
   const before = readLedger(storage);
   if (before.events.some(e => !next.events.some(n => JSON.stringify(n) === JSON.stringify(e)))) throw new Error("Import refusé : un événement existant serait modifié ou supprimé.");
-  const known = instruments(safety.backup.portfolio, safety.backup.wealth);
+  const known = instruments(safety.backup.portfolio, safety.backup.wealth, safety.backup.financialRegistry);
   const incoming = next.events.filter(e => !before.events.some(old => old.id === e.id));
   for (const e of incoming) assertIncoming(e, before.events, known, safety.backup.portfolio);
   if (incoming.some(e => e.type === "split" && e.isin === "US29082A1079") && splitCheck(next.events).issues.length) throw new Error("Split Embraer incohérent ou répété : écriture refusée.");

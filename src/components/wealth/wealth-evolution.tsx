@@ -3,6 +3,8 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchHistory, type HistoryCheck } from "@/lib/history-prices.functions";
+import { DATA_KEYS } from "@/lib/local-transaction";
+import { notifyLocalData, subscribeLocalData } from "@/lib/local-data-events";
 import { readLedger, HISTORICAL_INSTRUMENTS } from "@/lib/ledger";
 import { readCompleteBackup } from "@/lib/backup-restoration";
 import { downloadJson } from "@/components/portfolio/target-editor";
@@ -34,8 +36,12 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
   const [snaps, setSnaps] = useState<Snapshots | null>(null);
 
   useEffect(() => {
-    try { setEvents(readLedger(localStorage).events); } catch { setLedgerError("Grand livre illisible : aucune reconstitution possible."); setEvents([]); }
-    try { const raw = localStorage.getItem(SNAPSHOTS_KEY); if (raw) setSnaps(snapshotsSchema.parse(JSON.parse(raw))); } catch { setErr("Instantanés locaux illisibles : ils n’ont pas été modifiés."); }
+    let ledgerRaw: string | null | undefined, snapshotsRaw: string | null | undefined;
+    const read = () => {
+      try { const raw = localStorage.getItem("equilibre.ledger.v1"); if (raw !== ledgerRaw) { setEvents(readLedger(localStorage).events); ledgerRaw = raw; } setLedgerError(null); } catch { setLedgerError("Grand livre illisible : aucune reconstitution possible."); setEvents([]); }
+      try { const raw = localStorage.getItem(SNAPSHOTS_KEY); if (raw !== snapshotsRaw) { setSnaps(raw ? snapshotsSchema.parse(JSON.parse(raw)) : null); snapshotsRaw = raw; } } catch { setErr("Instantanés locaux illisibles : ils n’ont pas été modifiés."); }
+    };
+    read(); return subscribeLocalData(DATA_KEYS, read);
   }, []);
 
   const { moves, issues } = useMemo(() => events ? buildMoves(events, portfolio) : { moves: [], issues: [] }, [events, portfolio]);
@@ -56,14 +62,15 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
   }, [moves, portfolio.positions, wealth.holdings]);
 
   async function load() {
-    if (!moves.length) return;
+    const firstMove = moves[0];
+    if (!firstMove) return;
     setLoading(true); setErr(null);
-    try { setData(await fetchHistory({ data: { items: instruments.map(({ key, isin, symbol, currency }) => ({ key, isin, symbol, currency })), from: moves[0]!.date } })); }
+    try { setData(await fetchHistory({ data: { items: instruments.map(({ key, isin, symbol, currency }) => ({ key, isin, symbol, currency })), from: firstMove.date } })); }
     catch (e) { setErr(e instanceof Error ? e.message : "Cours historiques indisponibles"); }
     finally { setLoading(false); }
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (events && moves.length && !data && !loading) void load(); }, [events, moves.length]);
+  const requestKey = JSON.stringify([moves[0]?.date, instruments.map(i => [i.key, i.symbol, i.currency])]);
+  useEffect(() => { if (events && moves.length) void load(); }, [requestKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const prices = useMemo(() => {
     const map = new Map<string, PricePoint[]>();
@@ -96,7 +103,7 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
       const next = upsertSnapshot(snaps, { date: g.date, at: new Date().toISOString(), total: g.value, pea: p.value, cto: c.value, perfGlobal: allPerf.global.at(-1) ?? null, perfPea: allPerf.pea.at(-1) ?? null, perfCto: allPerf.cto.at(-1) ?? null });
       const prev = snaps.items.find(i => i.date === g.date);
       if (prev && prev.total === g.value && prev.pea === p.value && prev.cto === c.value) return;
-      localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(next)); setSnaps(next);
+      localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(next)); notifyLocalData([SNAPSHOTS_KEY]);
     } catch { setErr("Instantané du jour non enregistré."); }
   }, [snaps, series, allPerf]);
 
@@ -106,7 +113,7 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
       const now = new Date().toISOString();
       const s = snapshotsSchema.parse({ version: 1, enabledAt: now, backupAt: now, items: [] });
       if (localStorage.getItem(SNAPSHOTS_KEY) !== null) return;
-      localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(s)); setSnaps(s);
+      localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(s)); notifyLocalData([SNAPSHOTS_KEY]);
     } catch (e) { setErr(e instanceof Error ? `Sauvegarde impossible : ${e.message}` : "Sauvegarde impossible : instantanés non activés."); }
   }
 

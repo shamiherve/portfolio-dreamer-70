@@ -30,6 +30,8 @@ export const valuationSchema = z.object({
 export const registrySchema = z.object({ version: z.literal(1), accounts: z.array(financialAccountSchema), instruments: z.array(financialInstrumentSchema), valuations: z.array(valuationSchema) }).strict().superRefine((r, ctx) => {
   const issue = (message: string) => ctx.addIssue({ code: "custom", message });
   for (const items of [r.accounts, r.instruments, r.valuations]) if (new Set(items.map(x => x.id)).size !== items.length) issue("Identifiants dupliqués.");
+  const activeValues = r.valuations.filter(v => !r.valuations.some(x => x.supersedes === v.id));
+  if (new Set(activeValues.map(v => `${v.instrumentId}|${v.date}`)).size !== activeValues.length) issue("Plusieurs valorisations actives du même instrument à la même date.");
   for (const v of r.valuations) {
     const i = r.instruments.find(x => x.id === v.instrumentId);
     if (!i || i.legacyRef || i.accountId !== v.accountId) issue("Valorisation : instrument/compte incohérent ou position existante protégée.");
@@ -37,6 +39,8 @@ export const registrySchema = z.object({ version: z.literal(1), accounts: z.arra
       const old = r.valuations.find(x => x.id === v.supersedes);
       if (!old || old.instrumentId !== v.instrumentId || old.accountId !== v.accountId || old.at > v.at || old.id === v.id) issue("Révision de valorisation incohérente.");
       if (r.valuations.filter(x => x.supersedes === v.supersedes).length !== 1) issue("Valorisation déjà corrigée.");
+      const visited = new Set([v.id]); let cursor: string | null = v.supersedes;
+      while (cursor) { if (visited.has(cursor)) { issue("Cycle de corrections de valorisation."); break; } visited.add(cursor); cursor = r.valuations.find(x => x.id === cursor)?.supersedes ?? null; }
     }
     if (v.origin === "quote" && !v.quote) issue("Source du cours manquante.");
   }
@@ -63,9 +67,10 @@ export function visibleInstruments(r: FinancialRegistry, p: Portfolio, w: Wealth
   ];
   return [...existing.map(i => { const override = r.instruments.find(x => x.legacyRef === i.id); return override ? { ...i, name: override.name, active: override.active } : i; }), ...r.instruments.filter(i => !i.legacyRef)];
 }
-export function validateRegistry(raw: unknown, p: Portfolio, w: Wealth): FinancialRegistry {
+export function validateRegistry(raw: unknown, p: Portfolio, w: Wealth, allowStaleLegacy = false): FinancialRegistry {
   const r = registrySchema.parse(raw);
   const accounts = visibleAccounts(r, w);
+  for (const a of r.accounts.filter(x => !x.legacyId)) if (accounts.some(x => x.id !== a.id && x.name.trim().toLocaleLowerCase("fr") === a.name.trim().toLocaleLowerCase("fr") && x.type === a.type && x.institution.trim().toLocaleLowerCase("fr") === a.institution.trim().toLocaleLowerCase("fr") && x.currency === a.currency)) throw new Error("Compte potentiellement déjà présent : même nom, type, établissement et devise. Vérifiez sa fiche existante.");
   if (r.accounts.some(a => a.legacyId && !w.accounts.some(x => x.id === a.legacyId))) throw new Error("Référence de compte existant inconnue.");
   if (new Set(r.accounts.flatMap(a => a.legacyId ? [a.legacyId] : [])).size !== r.accounts.filter(a => a.legacyId).length) throw new Error("Compte existant dupliqué.");
   if (r.accounts.some(a => !a.legacyId && w.accounts.some(x => x.id === a.id))) throw new Error("Identifiant de compte déjà réservé.");
@@ -77,7 +82,9 @@ export function validateRegistry(raw: unknown, p: Portfolio, w: Wealth): Financi
     if (i.classId && !w.classes.some(c => c.id === i.classId)) throw new Error("Classe inconnue.");
     if (i.legacyRef) {
       const old = original.find(x => x.id === i.legacyRef);
-      if (!old || ["id", "accountId", "isin", "ticker", "exchange", "currency", "type", "quantity", "mode", "classId"].some(k => old[k as keyof FinancialInstrument] !== i[k as keyof FinancialInstrument])) throw new Error("Identité, quantité et cotation existantes protégées.");
+      // Legacy snapshots may retain older quantities/listings. They are references, never numerical sources.
+      const protectedFields = allowStaleLegacy ? ["id", "accountId", "isin"] : ["id", "accountId", "isin", "ticker", "exchange", "currency", "type", "quantity", "mode", "classId"];
+      if (!old || protectedFields.some(k => old[k as keyof FinancialInstrument] !== i[k as keyof FinancialInstrument])) throw new Error("Identité, quantité et cotation existantes protégées.");
     } else if (original.some(x => x.id === i.id || (i.isin && x.accountId === i.accountId && x.isin === i.isin))) throw new Error("Instrument déjà présent : utilisez sa ligne existante.");
     if (r.instruments.some(x => x.id !== i.id && x.accountId === i.accountId && i.isin && x.isin === i.isin)) throw new Error("ISIN déjà présent dans ce compte.");
   }

@@ -14,6 +14,8 @@ import { FinalOverview } from "./final-overview";
 import { ConsolidatedImport } from "./consolidated-import";
 import { SourceReport } from "./source-report";
 import { ManualOperations } from "./manual-operations";
+import { subscribeLocalData } from "@/lib/local-data-events";
+import { DATA_KEYS } from "@/lib/local-transaction";
 
 const inputClass = "w-full rounded-md border border-input bg-surface px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring";
 const money = (n: number, currency = "EUR") => new Intl.NumberFormat("fr-FR", { style: "currency", currency, maximumFractionDigits: 2 }).format(n);
@@ -41,8 +43,7 @@ export function HistoryWorkbench() {
   useEffect(() => {
     reload();
     const readChanged = () => { if (expectedRef.current && JSON.stringify(snapshot(localStorage)) !== JSON.stringify(expectedRef.current)) reload(); };
-    window.addEventListener("focus", readChanged); window.addEventListener("storage", readChanged);
-    return () => { window.removeEventListener("focus", readChanged); window.removeEventListener("storage", readChanged); };
+    return subscribeLocalData(DATA_KEYS, readChanged);
   }, []);
   const sheet = sheets[sheetIndex];
   const result = useMemo(() => {
@@ -109,6 +110,6 @@ export function HistoryWorkbench() {
         {finalReview && data && expected && <ConsolidatedImport review={finalReview} sheets={sheets} data={data} expected={expected} usualBrowser={usualBrowser} onDone={reload} />}
       </>}
     </section>
-    <section className="space-y-4" aria-label="Grand livre enregistré"><h2 className="text-lg font-semibold">Grand livre enregistré</h2>{!ledgerEvents.length ? <p className="text-sm text-muted-foreground">Aucun événement historique importé.</p> : <><p className="text-xs text-muted-foreground">{ledgerEvents.length} événements · les 100 plus récents ci-dessous. L’export complet contient l’intégralité.</p><div className="overflow-x-auto"><table className="w-full min-w-[800px] text-left text-sm"><thead className="border-b border-border text-muted-foreground"><tr>{["Date / valeur", "Compte", "Opération", "Instrument", "Quantité", "Montant", "Source"].map(h => <th key={h} className="py-3">{h}</th>)}</tr></thead><tbody>{[...ledgerEvents].sort((a, b) => b.operationDate.localeCompare(a.operationDate)).slice(0, 100).map(e => <tr key={e.id} className="border-b border-border"><td className="py-3">{e.operationDate}<br /><span className="text-xs text-muted-foreground">{e.settlementDate ?? "—"}</span></td><td>{e.accountId.toUpperCase()}</td><td>{operationLabels[e.type]}</td><td>{e.instrumentName}<br /><span className="text-xs text-muted-foreground">{e.isin}</span></td><td className="font-mono">{e.quantity ?? "—"}</td><td className="font-mono">{money(e.amount, e.currency)}</td><td className="text-xs text-muted-foreground">{e.source.file} · {e.source.sheet} · ligne {e.source.row}</td></tr>)}</tbody></table></div></>}</section>
+
   </main>;
 }

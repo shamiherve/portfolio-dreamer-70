@@ -3,13 +3,15 @@ import { assertIncoming, potentialDuplicate, readCompleteBackup } from "./backup
 import { atomicLocalWrite, type LocalStorageAccess } from "./local-transaction";
 import { buildMoves } from "./performance";
 import { SNAPSHOTS_KEY, snapshotsSchema } from "./performance";
-import type { Portfolio } from "./portfolio";
-import type { Wealth } from "./wealth";
+import { PORTFOLIO_KEY, type Portfolio } from "./portfolio";
+import { WEALTH_KEY, type Wealth } from "./wealth";
+import { REGISTRY_KEY, emptyRegistry, visibleAccounts, type FinancialRegistry } from "./financial-registry";
+import { applyPositionChanges, positionDelta } from "./position-change";
 
 /** Manual entries reuse the single ledger (equilibre.ledger.v1); amount = gross, fees separate, as for imports. */
 export const manualTypes = ["deposit", "withdrawal", "buy", "sell", "dividend", "fee", "tax", "split", "corporate_action"] as const;
 export type ManualType = typeof manualTypes[number];
-export interface ManualInput { accountId: "pea" | "cto"; type: ManualType; date: string; instrumentId: string; quantity: string; price: string; gross: string; fees: string; net: string; splitRatio: string }
+export interface ManualInput { accountId: string; type: ManualType; date: string; instrumentId: string; quantity: string; price: string; gross: string; fees: string; net: string; splitRatio: string }
 export const emptyInput = (): ManualInput => ({ accountId: "pea", type: "deposit", date: "", instrumentId: "", quantity: "", price: "", gross: "", fees: "0", net: "", splitRatio: "" });
 export const needsInstrument = (t: ManualType) => ["buy", "sell", "dividend", "split", "corporate_action"].includes(t);
 export const needsQuantity = (t: ManualType) => ["buy", "sell", "split", "corporate_action"].includes(t);
@@ -28,21 +30,26 @@ export function netCash(type: ManualType, gross: number, fees: number) {
 export function isManual(e: LedgerEvent) { return e.source.origin === "manual"; }
 
 export interface Draft { event: LedgerEvent | null; errors: string[]; warnings: string[]; cash: number; quantityDelta: number; heldBefore: number | null; heldAfter: number | null }
+function accountMoves(events: LedgerEvent[], portfolio: Portfolio, accountId: string) {
+  return accountId === "pea" || accountId === "cto" ? buildMoves(events, portfolio).moves.filter(m => m.account === accountId) : events.filter(e => e.accountId === accountId).map(e => ({ isin: e.isin, date: e.operationDate, dq: positionDelta(e) }));
+}
 export function heldAt(events: LedgerEvent[], portfolio: Portfolio, accountId: string, isin: string, date: string) {
-  return Math.round(buildMoves(events, portfolio).moves.filter(m => m.account === accountId && m.isin === isin && m.date <= date).reduce((q, m) => q + m.dq, 0) * 1e8) / 1e8;
+  return Math.round(accountMoves(events, portfolio, accountId).filter(m => m.isin === isin && m.date <= date).reduce((q, m) => q + m.dq, 0) * 1e8) / 1e8;
 }
 function minRunning(events: LedgerEvent[], portfolio: Portfolio, accountId: string, isin: string) {
-  const ms = buildMoves(events, portfolio).moves.filter(m => m.account === accountId && m.isin === isin).sort((a, b) => a.date.localeCompare(b.date) || b.dq - a.dq);
+  const ms = accountMoves(events, portfolio, accountId).filter(m => m.isin === isin).sort((a, b) => a.date.localeCompare(b.date) || b.dq - a.dq);
   let q = 0, min = 0; for (const m of ms) { q += m.dq; min = Math.min(min, q); } return Math.round(min * 1e8) / 1e8;
 }
 
-export function buildDraft(input: ManualInput, ctx: { portfolio: Portfolio; wealth: Wealth; events: LedgerEvent[]; id: string; now: string; replacing?: string }): Draft {
+export function buildDraft(input: ManualInput, ctx: { portfolio: Portfolio; wealth: Wealth; registry?: FinancialRegistry; events: LedgerEvent[]; id: string; now: string; replacing?: string }): Draft {
   const errors: string[] = [], warnings: string[] = [];
   const others = ctx.events.filter(e => e.id !== ctx.replacing);
   const t = input.type;
   if (!input.date) errors.push("Date de l’opération obligatoire.");
   else if (input.date > ctx.now.slice(0, 10)) errors.push("Date future refusée.");
-  const inst = needsInstrument(t) ? instruments(ctx.portfolio, ctx.wealth).find(i => i.id === input.instrumentId && i.accountId === input.accountId) : undefined;
+  const account = visibleAccounts(ctx.registry ?? emptyRegistry(), ctx.wealth).find(a => a.id === input.accountId);
+  if (!account?.active || account.currency !== "EUR") errors.push("Compte actif en EUR obligatoire ; aucune conversion de mouvement inventée.");
+  const inst = needsInstrument(t) ? instruments(ctx.portfolio, ctx.wealth, ctx.registry).find(i => i.id === input.instrumentId && i.accountId === input.accountId) : undefined;
   if (needsInstrument(t) && !inst) errors.push("Instrument obligatoire, choisi dans le référentiel du compte.");
   if (inst && !inst.isin) errors.push("Instrument sans ISIN : enregistrement impossible.");
   const quantity = num(input.quantity), price = num(input.price), grossIn = num(input.gross), feesIn = num(input.fees) ?? 0, netIn = num(input.net), ratio = num(input.splitRatio);
@@ -74,7 +81,7 @@ export function buildDraft(input: ManualInput, ctx: { portfolio: Portfolio; weal
     quantity: t === "split" ? splitDelta : needsQuantity(t) ? (quantity ?? 0) : null, executionPrice: needsPrice(t) ? price : null,
     amount: hasCash(t) ? r2(gross ?? 0) : 0, fees: r2(fees), taxes: 0, withholding: 0, currency: "EUR", fxRate: 1,
     splitRatio: t === "split" ? ratio : null, transferId: null,
-    source: { broker: input.accountId === "pea" ? "fortuneo" : "trade-republic", file: "saisie-manuelle", sheet: "Saisie manuelle", row: 1, reference: `manual:${ctx.id}`, importedAt: original?.source.importedAt ?? ctx.now, origin: "manual" },
+    source: { broker: "manual", file: "saisie-manuelle", sheet: "Saisie manuelle", row: 1, reference: `manual:${ctx.id}`, importedAt: original?.source.importedAt ?? ctx.now, origin: "manual" },
   };
   const parsed = eventSchema.safeParse(raw);
   if (!parsed.success) return { event: null, errors: parsed.error.issues.map(i => i.message), warnings, cash, quantityDelta: dq, heldBefore: held, heldAfter: null };
@@ -95,18 +102,33 @@ export function writeManualChange(storage: LocalStorageAccess, change: { add?: L
   if (removed && !isManual(removed)) throw new Error("Seules les opérations saisies manuellement peuvent être modifiées ou supprimées ; les opérations importées sont protégées.");
   if (change.add && !isManual(change.add)) throw new Error("Provenance manuelle requise.");
   const others = before.events.filter(e => e.id !== change.remove);
-  if (change.add) {
-    if (others.some(e => e.id === change.add!.id)) throw new Error("Identifiant déjà utilisé.");
-    assertIncoming(change.add, others, instruments(safety.backup.portfolio, safety.backup.wealth), safety.backup.portfolio);
+  const add = change.add ? eventSchema.parse(change.add) : undefined;
+  if (add) {
+    if (others.some(e => e.id === add.id)) throw new Error("Identifiant déjà utilisé.");
+    const accounts = visibleAccounts(safety.backup.financialRegistry ?? emptyRegistry(), safety.backup.wealth);
+    if (!accounts.some(a => a.id === add.accountId && a.active && a.currency === "EUR")) throw new Error("Compte absent ou inactif : opération refusée.");
+    assertIncoming(add, others, instruments(safety.backup.portfolio, safety.backup.wealth, safety.backup.financialRegistry), safety.backup.portfolio);
+    if (add.isin && minRunning([...others, add], safety.backup.portfolio, add.accountId, add.isin) < -1e-9) throw new Error("Quantité historique négative : opération refusée.");
   }
-  const next = ledgerSchema.parse({ ...before, events: change.add ? [...others, change.add] : others, updatedAt: new Date().toISOString() });
+  const state = applyPositionChanges(safety.backup.portfolio, safety.backup.wealth, safety.backup.financialRegistry ?? emptyRegistry(), removed, add);
+  if (state.applied && add) add.source.positionApplied = true;
+  const next = ledgerSchema.parse({ ...before, events: add ? [...others, add] : others, updatedAt: new Date().toISOString() });
+  for (const e of [removed, add]) if (e?.isin && minRunning(next.events, safety.backup.portfolio, e.accountId, e.isin) < -1e-9) throw new Error("Cette correction rendrait une quantité historique négative.");
   const keys = next.events.map(eventKey), refs = next.events.flatMap(e => referenceKey(e) ?? []);
   if (new Set(keys).size !== keys.length || new Set(refs).size !== refs.length) throw new Error("Doublons dans le grand livre : enregistrement refusé.");
   if (before.events.filter(e => !isManual(e)).some(e => !next.events.some(n => JSON.stringify(n) === JSON.stringify(e)))) throw new Error("Une opération importée serait modifiée : refusé.");
   if (next.events.some(e => e.type === "split" && e.isin === "US29082A1079") && splitCheck(next.events).issues.length && !splitCheck(before.events).issues.length) throw new Error("Split Embraer incohérent : refusé.");
-  atomicLocalWrite(storage, { [LEDGER_KEY]: JSON.stringify(next) }, safety.content, expected);
   const from = [removed?.operationDate, change.add?.operationDate].filter((d): d is string => !!d).sort()[0];
-  return { safety, pruned: from ? pruneSnapshots(storage, from) : 0 };
+  const values: Record<string, string | null> = { [LEDGER_KEY]: JSON.stringify(next) };
+  if (JSON.stringify(state.p) !== JSON.stringify(safety.backup.portfolio)) values[PORTFOLIO_KEY] = JSON.stringify(state.p);
+  if (JSON.stringify(state.w) !== JSON.stringify(safety.backup.wealth)) values[WEALTH_KEY] = JSON.stringify(state.w);
+  if (JSON.stringify(state.r) !== JSON.stringify(safety.backup.financialRegistry ?? emptyRegistry())) values[REGISTRY_KEY] = JSON.stringify(state.r);
+  const snaps = safety.backup.snapshots;
+  const kept = snaps && from ? snaps.items.filter(i => i.date < from) : snaps?.items;
+  const pruned = snaps && kept ? snaps.items.length - kept.length : 0;
+  if (pruned) values[SNAPSHOTS_KEY] = JSON.stringify({ ...snaps, items: kept });
+  atomicLocalWrite(storage, values, safety.content, expected);
+  return { safety, pruned };
 }
 /** Recorded daily snapshots on/after a changed date no longer match the ledger: drop them (today's is re-recorded on next visit). */
 export function pruneSnapshots(storage: LocalStorageAccess, from: string) {
