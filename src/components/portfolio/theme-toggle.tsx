@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { assertNoPendingTransaction, recoverLocalTransaction } from "@/lib/local-transaction";
 
 const THEME_KEY = "equilibre.theme.v1";
 
@@ -12,6 +13,7 @@ export function ThemeToggle() {
   useEffect(() => {
     let savedDark = document.documentElement.classList.contains("dark");
     try {
+      recoverLocalTransaction(localStorage);
       const saved = localStorage.getItem(THEME_KEY);
       if (saved === "dark" || saved === "light") savedDark = saved === "dark";
     } catch {
@@ -26,7 +28,7 @@ export function ThemeToggle() {
     const next = !dark;
     document.documentElement.classList.toggle("dark", next);
     setDark(next);
-    try { localStorage.setItem(THEME_KEY, next ? "dark" : "light"); } catch {
+    try { assertNoPendingTransaction(localStorage); localStorage.setItem(THEME_KEY, next ? "dark" : "light"); } catch {
       // Do not prevent a theme change if storage is blocked.
     }
   }}>{dark ? <Sun /> : <Moon />}</Button>;

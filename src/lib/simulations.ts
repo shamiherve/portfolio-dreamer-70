@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Category } from "./rebalance";
+import { assertNoPendingTransaction, recoverLocalTransaction } from "./local-transaction";
 
 export type Simulation = {
   id: string;
@@ -14,6 +15,7 @@ const STORAGE_KEY = "equilibre.simulations.v1";
 function read(): Simulation[] {
   if (typeof window === "undefined") return [];
   try {
+    recoverLocalTransaction(window.localStorage);
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
@@ -33,12 +35,9 @@ export function useSimulations() {
   }, []);
 
   const persist = useCallback((next: Simulation[]) => {
+    assertNoPendingTransaction(window.localStorage);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     setSimulations(next);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      /* quota or private mode: ignore */
-    }
   }, []);
 
   const save = useCallback(

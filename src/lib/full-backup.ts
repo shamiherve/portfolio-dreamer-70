@@ -5,7 +5,7 @@ import { initialWealth, wealthSchema, holdingError, targetIssues, PARENT_GROUPS,
 export const FULL_BACKUP_FORMAT = "equilibre-full-backup";
 export const FULL_BACKUP_VERSION = 1;
 export const THEME_STORAGE_KEY = "equilibre.theme.v1";
-type FullBackup = {
+export type FullBackup = {
   format: typeof FULL_BACKUP_FORMAT; version: typeof FULL_BACKUP_VERSION; exportedAt: string;
   portfolio: Portfolio; wealth: Wealth; simulations: z.infer<typeof simulationsSchema>;
   theme: "light" | "dark" | null;

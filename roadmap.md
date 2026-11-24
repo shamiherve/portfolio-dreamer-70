@@ -1,4 +1,9 @@
 # ETF dashboard finalization
+- [x] Secure full restoration with validation, automatic safety copy, rollback and compatible legacy backups; verified with synthetic restoration and failure tests.
+- [x] Add an independent local financial ledger and CSV/Excel mapping, review, duplicates and cash reconciliation; never update holdings. Source reports include all sheets and distinguish incomplete rows from importable events.
+- [x] Test restoration failures, imports, existing ETF duplicates, fractions, dividends, fees/taxes, Embraer split, dates and cash; 156 tests pass, synthetic confirmation/restore flows and real-workbook read-only desktop/mobile preview verified.
+- [x] Analyze the supplied historical exports read-only: 59 movements, no identical-row duplicates, preserved UTC precision, PEA −5.58 EUR / CTO 1.70 EUR arithmetic balances; report provided separately, no real import.
+- [ ] Definitive historical import — blocked pending explicit user approval and review of missing PEA ISIN/execution prices, external-transfer qualification and cash-statement discrepancies; no holdings changes permitted.
 - [x] Add a separate validated, timestamped full-wealth export; 15 synthetic export tests and 30 existing regression tests pass, with isolated browser download/read-only/error/mobile checks. Legacy exports, restoration, storage writes and market logic remain unchanged.
 - [x] Create the separate public shamiherve/euronext-etf-quotes repository and free GitHub Actions/Pages pipeline; publish no holdings or app code.
 - [x] Test all four configured ETF ISINs, EUR-only valid trades, conservative modification/non-price filters, failure preservation and separate timestamps: 19 tests pass; live GitHub run succeeds and public JSON is browser-readable.

@@ -120,7 +120,22 @@ export function recordTransaction(p: Portfolio, input: Portfolio["transactions"]
 }
 const backupSchema = z.object({ format: z.literal("equilibre-backup"), version: z.literal(1), exportedAt: z.string().datetime(), portfolio: portfolioSchema, simulations: simulationsSchema });
 export type Backup = z.infer<typeof backupSchema>;
-export function parseBackup(raw: string): Backup { return backupSchema.parse(JSON.parse(raw)); }
+export function parseBackup(raw: string): Backup {
+  const input: unknown = JSON.parse(raw);
+  const checked = backupSchema.parse(input);
+  const rejectUnknown = (source: unknown, parsed: unknown) => {
+    if (Array.isArray(source) && Array.isArray(parsed)) source.forEach((v, i) => rejectUnknown(v, parsed[i]));
+    else if (source && parsed && typeof source === "object" && typeof parsed === "object") {
+      const shape = parsed as Record<string, unknown>;
+      for (const [key, value] of Object.entries(source)) {
+        if (!Object.hasOwn(shape, key)) throw new Error(`Champ inconnu : ${key}. Migration explicite nécessaire.`);
+        rejectUnknown(value, shape[key]);
+      }
+    }
+  };
+  rejectUnknown(input, checked);
+  return checked;
+}
 export function exportBackup(portfolio: Portfolio, simulations: unknown): string {
   return JSON.stringify(backupSchema.parse({ format: "equilibre-backup", version: 1, exportedAt: new Date().toISOString(), portfolio, simulations }), null, 2);
 }
