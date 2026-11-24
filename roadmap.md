@@ -26,4 +26,4 @@
 - [x] Evolve the wealth contribution simulator: target column in the comparison table, "Tous les comptes" global optimisation (best of joint account×class water-filling and single-account splits, never worse than the best single account), and "Atteindre mes cibles" mode with theoretical minimum, whole-unit investable minimum and explicit leftover; 117 tests pass and browser checks verify all three modes, unchanged stored data and mobile layout.
 
 - [x] Évolution du patrimoine (Patrimoine) : reconstitution PEA/CTO, Valeur/Performance TWR, 7 périodes, contrôle des instruments, instantanés quotidiens après sauvegarde ; 8 tests.
-- [ ] STOXX Europe 600 (FR0011550193) : aucune cotation Paris trouvée par ISIN — bloqué, ticker à confirmer par l’utilisateur.
+- [x] STOXX Europe 600 (FR0011550193) : historique via ETZ.PA confirmé par l’utilisateur.

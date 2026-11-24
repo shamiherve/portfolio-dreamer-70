@@ -153,3 +153,5 @@ export type Snapshots = z.infer<typeof snapshotsSchema>;
 export function upsertSnapshot(s: Snapshots, snap: Snapshot): Snapshots {
   return snapshotsSchema.parse({ ...s, items: [...s.items.filter(x => x.date !== snap.date), snap].sort((a, b) => a.date.localeCompare(b.date)) });
 }
+/** User-confirmed (24/11/2026) listings for ISINs the provider search cannot resolve; history only, never quotes or positions. */
+export const CONFIRMED_HISTORY_SYMBOLS: Record<string, string> = { FR0011550193: "ETZ.PA" };

@@ -9,7 +9,7 @@ import { downloadJson } from "@/components/portfolio/target-editor";
 import { eur } from "@/lib/rebalance";
 import type { Portfolio } from "@/lib/portfolio";
 import type { Wealth } from "@/lib/wealth";
-import { buildMoves, finalQuantities, PERIODS, reconstruct, SNAPSHOTS_KEY, snapshotsSchema, toEur, upsertSnapshot, windowPerformance, windowStart, type PeriodId, type PricePoint, type Snapshots } from "@/lib/performance";
+import { CONFIRMED_HISTORY_SYMBOLS, buildMoves, finalQuantities, PERIODS, reconstruct, SNAPSHOTS_KEY, snapshotsSchema, toEur, upsertSnapshot, windowPerformance, windowStart, type PeriodId, type PricePoint, type Snapshots } from "@/lib/performance";
 
 type Key = "global" | "pea" | "cto";
 const SERIES: { id: Key; label: string; color: string }[] = [
@@ -46,7 +46,7 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
       const h = wealth.holdings.find(x => x.isin === m.isin && x.accountId === m.account);
       const hist = HISTORICAL_INSTRUMENTS.find(x => x.isin === m.isin);
       const verifiedYahoo = h?.market && ["verified", "corrected"].includes(h.market.status) && h.market.provider === "yahoo" ? (h.market.userSymbol ?? h.market.symbol) : null;
-      seen.set(m.isin, { key: m.isin, isin: m.isin, symbol: etf ? null : verifiedYahoo, currency: etf || hist ? "EUR" : (h?.market?.verified?.currency ?? h?.currency ?? "EUR"), name: etf?.name ?? h?.name ?? hist?.name ?? m.isin, account: m.account });
+      seen.set(m.isin, { key: m.isin, isin: m.isin, symbol: CONFIRMED_HISTORY_SYMBOLS[m.isin] ?? (etf ? null : verifiedYahoo), currency: etf || hist ? "EUR" : (h?.market?.verified?.currency ?? h?.currency ?? "EUR"), name: etf?.name ?? h?.name ?? hist?.name ?? m.isin, account: m.account });
     }
     return [...seen.values()];
   }, [moves, portfolio.positions, wealth.holdings]);
