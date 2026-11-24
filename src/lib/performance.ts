@@ -155,3 +155,24 @@ export function upsertSnapshot(s: Snapshots, snap: Snapshot): Snapshots {
 }
 /** User-confirmed (24/11/2026) listings for ISINs the provider search cannot resolve; history only, never quotes or positions. */
 export const CONFIRMED_HISTORY_SYMBOLS: Record<string, string> = { FR0011550193: "ETZ.PA" };
+
+export interface BreakdownLine { account: AccountId; isin: string; quantity: number; close: number | null; priceDate: string | null; value: number | null }
+/** Read-only detail of one day: reconstructed quantities × EUR close, plus net cash per account. */
+export function dayBreakdown(moves: Move[], prices: Map<string, PricePoint[]>, date: string) {
+  const qty = new Map<string, number>(); const cash = { pea: 0, cto: 0 };
+  for (const m of moves) {
+    if (m.date > date) break;
+    cash[m.account] += m.cash;
+    if (m.isin && m.dq) { const k = `${m.account}|${m.isin}`; qty.set(k, Math.round(((qty.get(k) ?? 0) + m.dq) * 1e8) / 1e8); }
+  }
+  const lines: BreakdownLine[] = [];
+  for (const [k, q] of qty) {
+    if (Math.abs(q) < 1e-9) continue;
+    const [account, isin] = k.split("|") as [AccountId, string];
+    const pts = prices.get(isin); const p = priceAt(pts, date);
+    let priceDate: string | null = null;
+    if (p && pts) priceDate = [...pts].reverse().find(x => x.date <= date)?.date ?? null;
+    lines.push({ account, isin, quantity: q, close: p?.close ?? null, priceDate, value: p ? Math.round(q * p.close * 100) / 100 : null });
+  }
+  return { lines, cash: { pea: Math.round(cash.pea * 100) / 100, cto: Math.round(cash.cto * 100) / 100 } };
+}

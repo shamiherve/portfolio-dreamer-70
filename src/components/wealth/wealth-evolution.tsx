@@ -9,7 +9,7 @@ import { downloadJson } from "@/components/portfolio/target-editor";
 import { eur } from "@/lib/rebalance";
 import type { Portfolio } from "@/lib/portfolio";
 import type { Wealth } from "@/lib/wealth";
-import { CONFIRMED_HISTORY_SYMBOLS, buildMoves, finalQuantities, PERIODS, reconstruct, SNAPSHOTS_KEY, snapshotsSchema, toEur, upsertSnapshot, windowPerformance, windowStart, type PeriodId, type PricePoint, type Snapshots } from "@/lib/performance";
+import { CONFIRMED_HISTORY_SYMBOLS, buildMoves, finalQuantities, dayBreakdown, PERIODS, reconstruct, SNAPSHOTS_KEY, snapshotsSchema, toEur, upsertSnapshot, windowPerformance, windowStart, type PeriodId, type PricePoint, type Snapshots } from "@/lib/performance";
 
 type Key = "global" | "pea" | "cto";
 const SERIES: { id: Key; label: string; color: string }[] = [
@@ -189,6 +189,13 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
       {issues.map(i => <p key={i}>{i}</p>)}
       {qtyIssues.length > 0 && <p>Quantités reconstituées différentes des positions enregistrées (aucune correction appliquée) : {qtyIssues.join(" ; ")}</p>}
     </div>}
+
+    {series && last && (() => { const b = dayBreakdown(moves, prices, last.date); return <details className="text-sm"><summary className="cursor-pointer font-medium">Détail du calcul au {fr(last.date)}</summary>
+      <div className="mt-2 overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-muted-foreground"><tr><th className="p-1">Compte</th><th className="p-1">Instrument</th><th className="p-1 text-right">Quantité reconstituée</th><th className="p-1 text-right">Clôture (€)</th><th className="p-1">Date du cours</th><th className="p-1 text-right">Valeur</th></tr></thead>
+        <tbody>{(["pea", "cto"] as const).flatMap(a => [...b.lines.filter(l => l.account === a).map(l => <tr key={`${a}${l.isin}`} className="border-t border-border"><td className="p-1">{a.toUpperCase()}</td><td className="p-1">{names.get(l.isin) ?? l.isin}</td><td className="p-1 text-right tabular-nums">{l.quantity}</td><td className="p-1 text-right tabular-nums">{l.close === null ? "manquant" : l.close.toFixed(2)}</td><td className="p-1">{fr(l.priceDate)}</td><td className="p-1 text-right tabular-nums">{l.value === null ? "—" : eur(l.value)}</td></tr>),
+          <tr key={`${a}cash`} className="border-t border-border font-medium"><td className="p-1">{a.toUpperCase()}</td><td className="p-1">Espèces nettes reconstituées</td><td /><td /><td /><td className="p-1 text-right tabular-nums">{eur(b.cash[a])}</td></tr>])}</tbody></table></div>
+      <p className="mt-1 text-xs text-muted-foreground">Une ligne absente ici n’est pas dans le grand livre ni dans les transactions ETF de ce navigateur ; des espèces très négatives signalent des achats sans le versement correspondant.</p>
+    </details>; })()}
 
     {data && <details className="text-sm"><summary className="cursor-pointer font-medium">Vérification des instruments ({data.checks.length})</summary>
       <div className="mt-2 overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-muted-foreground"><tr><th className="p-1">Instrument</th><th className="p-1">ISIN</th><th className="p-1">Ticker</th><th className="p-1">Place</th><th className="p-1">Devise</th><th className="p-1">Historique depuis</th><th className="p-1">Points</th><th className="p-1">État</th></tr></thead>
