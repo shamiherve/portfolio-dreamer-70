@@ -13,6 +13,7 @@ import { confirmedWorkbookOptions, finalHistoryReview } from "@/lib/history-fina
 import { FinalOverview } from "./final-overview";
 import { ConsolidatedImport } from "./consolidated-import";
 import { SourceReport } from "./source-report";
+import { ManualOperations } from "./manual-operations";
 
 const inputClass = "w-full rounded-md border border-input bg-surface px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring";
 const money = (n: number, currency = "EUR") => new Intl.NumberFormat("fr-FR", { style: "currency", currency, maximumFractionDigits: 2 }).format(n);
@@ -64,6 +65,7 @@ export function HistoryWorkbench() {
   return <main className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6">
     <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-2xl font-semibold">Historique PEA & CTO</h1><p className="mt-2 text-sm text-muted-foreground">Grand livre indépendant · {ledgerEvents.length} événements enregistrés</p></div><Button variant="outline" size="sm" onClick={reload}><RefreshCw />Relire les données locales</Button></header>
     <FullBackupExport ready={data !== null} />
+    <ManualOperations data={data} expected={expected} onSaved={reload} />
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <section className="space-y-5 border-b border-border pb-6" aria-label="Import historique">
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Prévisualisation d’import</h2><Button variant="outline" disabled={!data || loading} onClick={() => file.current?.click()}><FileSpreadsheet />{loading ? "Lecture…" : "Choisir un CSV ou Excel"}</Button></div>

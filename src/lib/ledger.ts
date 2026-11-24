@@ -19,7 +19,7 @@ export const eventSchema = z.object({
   quantity: amount.nullable(), executionPrice: amount.nullable(), amount, fees: amount, taxes: amount, withholding: amount,
   currency: z.string().regex(/^[A-Z]{3}$/), fxRate: z.number().finite().positive().nullable(),
   splitRatio: z.number().finite().positive().nullable(), transferId: z.string().nullable(),
-  source: z.object({ broker: z.enum(["fortuneo", "trade-republic"]), file: z.string(), sheet: z.string(), row: z.number().int().positive(), reference: z.string(), importedAt: z.string().datetime(), originalColumns: z.array(z.object({ heading: z.string(), value: z.string() }).strict()).optional() }).strict(),
+  source: z.object({ broker: z.enum(["fortuneo", "trade-republic"]), file: z.string(), sheet: z.string(), row: z.number().int().positive(), reference: z.string(), importedAt: z.string().datetime(), origin: z.enum(["import", "manual"]).optional(), originalColumns: z.array(z.object({ heading: z.string(), value: z.string() }).strict()).optional() }).strict(),
 }).strict().superRefine((e, ctx) => {
   const issue = (message: string) => ctx.addIssue({ code: "custom", message });
   if (["buy", "sell"].includes(e.type) && (!e.isin || !e.quantity || (e.executionPrice !== null && e.executionPrice <= 0) || e.amount <= 0)) issue("Achat/vente incomplet : ISIN, quantité et montant requis ; un prix indisponible reste null.");
