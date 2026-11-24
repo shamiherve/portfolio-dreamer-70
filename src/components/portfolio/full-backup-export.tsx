@@ -24,12 +24,12 @@ export function FullBackupExport({ ready }: { ready: boolean }) {
         } catch {
           setError("Export complet refusé : données illisibles, champs inconnus ou relations incohérentes. Aucune donnée modifiée. L’export ETF reste disponible ; une migration explicite sera nécessaire pour des champs ou une version non reconnus.");
         }
-      }}><Download />Exporter mon patrimoine complet</Button>
-      <Button size="sm" variant="outline" disabled={!ready} onClick={() => file.current?.click()}><Upload />Restaurer une sauvegarde</Button>
+      }}><Download className="text-success" />Exporter mon patrimoine complet</Button>
+      <Button size="sm" variant="outline" disabled={!ready} onClick={() => file.current?.click()}><Upload className="text-info" />Restaurer une sauvegarde</Button>
       <Button size="sm" variant="ghost" disabled={!ready} onClick={() => {
         try { const raw = localStorage.getItem(SAFETY_KEY); if (!raw) throw new Error("Aucune copie de sécurité locale disponible."); parseRestoration(raw); downloadJson(raw, "equilibre-copie-securite.json"); setError(""); }
         catch (e) { setError(e instanceof Error ? e.message : "Copie indisponible."); }
-      }}><ShieldCheck />Télécharger la copie de sécurité</Button>
+      }}><ShieldCheck className="text-destructive" />Télécharger la copie de sécurité</Button>
       </div>
       <input ref={file} className="hidden" type="file" accept=".json,application/json" aria-label="Fichier de restauration complète" onChange={async e => {
         const f = e.target.files?.[0]; e.target.value = ""; setPending(null); setError(""); if (!f) return;

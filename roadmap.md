@@ -32,3 +32,4 @@
 
 - [x] Évolution du patrimoine (Patrimoine) : reconstitution PEA/CTO, Valeur/Performance TWR, 7 périodes, contrôle des instruments, instantanés quotidiens après sauvegarde ; 8 tests.
 - [x] STOXX Europe 600 (FR0011550193) : historique via ETZ.PA confirmé par l’utilisateur.
+- [x] Centraliser le bloc « Sauvegarde patrimoniale complète · v2 » : retiré de l’affichage de « Portefeuille ETF », conservé sur « Historique & sauvegardes » et « Gestion » (confirmé) ; icônes des trois boutons colorées (verte, bleue, rouge) sans changer boutons, logique, clés ni formats ; 234 tests, build OK.
