@@ -5,17 +5,23 @@ import { WEALTH_KEY } from "./wealth";
 import { ledgerSchema, readLedger, LEDGER_KEY, eventKey, referenceKey, existingEtf, instruments, splitCheck, type Ledger, type LedgerEvent } from "./ledger";
 import type { Portfolio } from "./portfolio";
 import { atomicLocalWrite, snapshot, type LocalStorageAccess } from "./local-transaction";
+import { readRegistry, validateRegistry, REGISTRY_KEY, type FinancialRegistry } from "./financial-registry";
+import { snapshotsSchema, SNAPSHOTS_KEY, type Snapshots } from "./performance";
 
-export type CompleteBackup = Omit<FullBackup, "version"> & { version: 2; ledger: Ledger };
-export function generateCompleteBackup(base: FullBackup, ledger: Ledger) {
-  const backup: CompleteBackup = { ...base, version: 2, ledger: ledgerSchema.parse(ledger) };
+export type CompleteBackup = Omit<FullBackup, "version"> & { version: 2; ledger: Ledger; financialRegistry?: FinancialRegistry; snapshots?: Snapshots };
+export function generateCompleteBackup(base: FullBackup, ledger: Ledger, extras: { financialRegistry?: FinancialRegistry; snapshots?: Snapshots } = {}) {
+  const backup: CompleteBackup = { ...base, ...extras, version: 2, ledger: ledgerSchema.parse(ledger) };
   const content = JSON.stringify(backup, null, 2);
   parseRestoration(content);
   return { backup, content, filename: `equilibre-patrimoine-complet-v2-${base.exportedAt.replace(/[:.]/g, "-")}.json` };
 }
 export function readCompleteBackup(storage: Pick<Storage, "getItem">) {
   const old = readFullBackup(storage);
-  return { ...generateCompleteBackup(old.backup, readLedger(storage)), warnings: old.warnings };
+  const extras: { financialRegistry?: FinancialRegistry; snapshots?: Snapshots } = {};
+  if (storage.getItem(REGISTRY_KEY) !== null) extras.financialRegistry = readRegistry(storage);
+  const rawSnapshots = storage.getItem(SNAPSHOTS_KEY);
+  if (rawSnapshots !== null) extras.snapshots = snapshotsSchema.parse(JSON.parse(rawSnapshots));
+  return { ...generateCompleteBackup(old.backup, readLedger(storage), extras), warnings: old.warnings };
 }
 export type Restoration = { kind: "complete-v2"; backup: CompleteBackup } | { kind: "complete-v1"; backup: FullBackup } | { kind: "etf-v1"; backup: Backup };
 export function parseRestoration(raw: string): Restoration {
@@ -25,13 +31,16 @@ export function parseRestoration(raw: string): Restoration {
   if (header.format !== "equilibre-full-backup") throw new Error("Format non reconnu.");
   if (header.version === 1) return { kind: "complete-v1", backup: parseFullBackup(raw) };
   if (header.version !== 2 || !b || typeof b !== "object") throw new Error("Version non compatible.");
-  const { ledger, ...base } = b as Record<string, unknown>;
+  const { ledger, financialRegistry, snapshots, ...base } = b as Record<string, unknown>;
   const checked = ledgerSchema.parse(ledger);
   const previous = parseFullBackup(JSON.stringify({ ...base, version: 1 }));
   const accounts = new Set(previous.wealth.accounts.map(a => a.id));
   if (checked.events.some(e => !accounts.has(e.accountId))) throw new Error("Grand livre : compte inconnu.");
   // Historical ISINs/instrument ids are independent and may refer to sold/deleted positions.
-  return { kind: "complete-v2", backup: { ...previous, version: 2, ledger: checked } };
+  const extras: { financialRegistry?: FinancialRegistry; snapshots?: Snapshots } = {};
+  if (financialRegistry !== undefined) extras.financialRegistry = validateRegistry(financialRegistry, previous.portfolio, previous.wealth);
+  if (snapshots !== undefined) extras.snapshots = snapshotsSchema.parse(snapshots);
+  return { kind: "complete-v2", backup: { ...previous, ...extras, version: 2, ledger: checked } };
 }
 export function restoreBackup(storage: LocalStorageAccess, pending: Restoration, expected?: Record<string, string | null>) {
   // Revalidate at the write boundary, even when called without the file chooser.
@@ -39,6 +48,11 @@ export function restoreBackup(storage: LocalStorageAccess, pending: Restoration,
   const safety = readCompleteBackup(storage);
   const b = checked.backup;
   const values: Record<string, string | null> = { [PORTFOLIO_KEY]: JSON.stringify(b.portfolio), [SIMULATIONS_KEY]: JSON.stringify(b.simulations) };
+  // Absent extension sections have an explicit non-destructive legacy scope.
+  const incomingRegistry = checked.kind === "complete-v2" ? checked.backup.financialRegistry : undefined;
+  validateRegistry(incomingRegistry ?? readRegistry(storage), b.portfolio, checked.kind === "etf-v1" ? safety.backup.wealth : checked.backup.wealth);
+  values[REGISTRY_KEY] = incomingRegistry ? JSON.stringify(incomingRegistry) : storage.getItem(REGISTRY_KEY);
+  values[SNAPSHOTS_KEY] = checked.kind === "complete-v2" && checked.backup.snapshots ? JSON.stringify(checked.backup.snapshots) : storage.getItem(SNAPSHOTS_KEY);
   if (checked.kind !== "etf-v1") {
     values[WEALTH_KEY] = JSON.stringify(checked.backup.wealth); values[THEME_STORAGE_KEY] = checked.backup.theme;
     values[LEDGER_KEY] = checked.kind === "complete-v2" ? JSON.stringify(checked.backup.ledger) : storage.getItem(LEDGER_KEY);

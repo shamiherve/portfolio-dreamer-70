@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-export const DATA_KEYS = ["equilibre.portfolio.v1", "equilibre.wealth.v1", "equilibre.simulations.v1", "equilibre.theme.v1", "equilibre.ledger.v1"] as const;
+export const DATA_KEYS = ["equilibre.portfolio.v1", "equilibre.wealth.v1", "equilibre.simulations.v1", "equilibre.theme.v1", "equilibre.ledger.v1", "equilibre.financial-registry.v1", "equilibre.snapshots.v1"] as const;
 export const SAFETY_KEY = "equilibre.safety-backup.v1";
 export const JOURNAL_KEY = "equilibre.restore-journal.v1";
 export type LocalStorageAccess = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-const snapshotSchema = z.object(Object.fromEntries(DATA_KEYS.map(k => [k, z.string().nullable()]))).strict();
+const snapshotSchema = z.object(Object.fromEntries(DATA_KEYS.map(k => [k, z.string().nullable().optional()]))).strict();
 const journalSchema = z.object({ version: z.literal(1), phase: z.enum(["prepared", "committed"]), before: snapshotSchema }).strict();
 export function snapshot(storage: Pick<Storage, "getItem">): Record<string, string | null> { return Object.fromEntries(DATA_KEYS.map(k => [k, storage.getItem(k)])); }
 function put(storage: LocalStorageAccess, key: string, value: string | null) {
@@ -18,7 +18,7 @@ export function recoverLocalTransaction(storage: LocalStorageAccess) {
   const journal = journalSchema.parse(JSON.parse(raw));
   if (journal.phase === "prepared") {
     let failed = false;
-    for (const key of DATA_KEYS) { try { put(storage, key, journal.before[key] as string | null); } catch { failed = true; } }
+    for (const key of DATA_KEYS) { if (!Object.hasOwn(journal.before, key)) continue; try { put(storage, key, journal.before[key] as string | null); } catch { failed = true; } }
     if (failed) throw new Error("Retour arrière incomplet : données bloquées. Libérez de l’espace puis rechargez ; la copie de sécurité est conservée.");
   }
   storage.removeItem(JOURNAL_KEY);
