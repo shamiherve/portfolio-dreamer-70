@@ -8,6 +8,7 @@ import { assertNoPendingTransaction } from "@/lib/local-transaction";
 import { fieldLabels, detectMapping, previewHistory, readHistoryFile, type Field, type ImportOptions, type ImportSheet, type RowOverride } from "@/lib/history-import";
 import { operationLabels, operationTypes, RECONCILIATION, instruments, type OperationType } from "@/lib/ledger";
 import { bankDefaults, auditSourceSheet } from "@/lib/history-source-audit";
+import { isConsolidatedSource, normalizeConsolidated } from "@/lib/history-consolidated";
 import { confirmedWorkbookOptions, finalHistoryReview } from "@/lib/history-final-review";
 import { FinalOverview } from "./final-overview";
 import { SourceReport } from "./source-report";
@@ -69,7 +70,7 @@ export function HistoryWorkbench() {
       <input ref={file} className="hidden" type="file" accept=".csv,.tsv,.xlsx" aria-label="Historique CSV ou Excel" onChange={async e => {
         const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
         setSheets([]); setError(""); setLoading(true);
-        try { const loaded = await readHistoryFile(f); const first = loaded[0]; if (!first) throw new Error("Aucune feuille."); reload(); const at = new Date().toISOString(); const configured = Object.fromEntries(loaded.map((s, i) => [i, { ...initialOptions, file: f.name, importedAt: at, headerRow: 1, mapping: detectMapping(s.grid[0] ?? []), ...confirmedWorkbookOptions(s, f.name) }])); setSheetOptions(configured); setSheets(loaded); setSheetIndex(0); setOptions(configured[0] ?? initialOptions); setPage(0); }
+        try { const loaded = (await readHistoryFile(f)).map(s => isConsolidatedSource(s) ? normalizeConsolidated(s) : s); const first = loaded[0]; if (!first) throw new Error("Aucune feuille."); reload(); const at = new Date().toISOString(); const configured = Object.fromEntries(loaded.map((s, i) => [i, { ...initialOptions, file: f.name, importedAt: at, headerRow: 1, mapping: detectMapping(s.grid[0] ?? []), ...confirmedWorkbookOptions(s, f.name) }])); setSheetOptions(configured); setSheets(loaded); setSheetIndex(0); setOptions(configured[0] ?? initialOptions); setPage(0); }
         catch (err) { setError(err instanceof Error ? err.message : "Lecture impossible."); }
         finally { setLoading(false); }
       }} />

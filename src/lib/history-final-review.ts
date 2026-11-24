@@ -1,11 +1,13 @@
 import { auditSourceSheet, bankDefaults } from "./history-source-audit";
 import { detectMapping, previewHistory, type ImportOptions, type ImportSheet, type PreviewRow } from "./history-import";
 import { eventKey, existingEtf, instruments, type Ledger, type LedgerEvent } from "./ledger";
+import { consolidatedOptions } from "./history-consolidated";
 import type { Portfolio } from "./portfolio";
 import type { Wealth } from "./wealth";
 
 /** Consent applies only to the supplied dated workbook, not all future inbound transfers. */
 export function confirmedWorkbookOptions(sheet: ImportSheet, file: string): Partial<ImportOptions> {
+  const consolidated = consolidatedOptions(sheet); if (consolidated) return consolidated;
   const defaults = bankDefaults(sheet);
   if (file !== "transactions_clean_2.xlsx") return defaults;
   const audit = auditSourceSheet(sheet);

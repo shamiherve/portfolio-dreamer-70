@@ -5,7 +5,7 @@ import type { Portfolio } from "./portfolio";
 import type { Wealth } from "./wealth";
 
 export type ImportCell = { value: string | number | Date | null; text: string; formula?: boolean };
-export type ImportSheet = { name: string; grid: ImportCell[][] };
+export type ImportSheet = { name: string; grid: ImportCell[][]; informational?: { row: number; label: string; operation: string; reason: string }[] };
 export type Field = "type" | "operationDate" | "settlementDate" | "timestamp" | "isin" | "name" | "reference" | "quantity" | "executionPrice" | "amount" | "debit" | "credit" | "fees" | "taxes" | "withholding" | "currency" | "fxRate" | "splitRatio" | "transferId";
 export const fieldLabels: Record<Field, string> = { type: "Opération", operationDate: "Date d’opération", settlementDate: "Date de valeur / règlement", timestamp: "Date et heure exactes", isin: "ISIN", name: "Instrument", reference: "Référence bancaire", quantity: "Quantité / variation du split", executionPrice: "Prix d’exécution", amount: "Montant", debit: "Débit", credit: "Crédit", fees: "Frais", taxes: "Taxes", withholding: "Retenue", currency: "Devise", fxRate: "Taux de change vers EUR", splitRatio: "Ratio du split", transferId: "Référence du transfert" };
 export type Mapping = Partial<Record<Field, number>>;
