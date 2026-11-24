@@ -27,10 +27,10 @@ export interface ComparisonSummary { id: BenchmarkId | "portfolio"; perf: number
  * Base 100 at the window start: portfolio from the existing windowed TWR, each index from its EUR close.
  * A date counts only when both sides are known; missing data stays null, never interpolated.
  */
-export function compareToBenchmarks(points: DayPoint[], perf: (number | null)[], start: string, histories: Partial<Record<BenchmarkId, PricePoint[]>>, ids: readonly BenchmarkId[]) {
+export function compareToBenchmarks(points: Pick<DayPoint, "date">[], perf: (number | null)[], start: string, histories: Partial<Record<BenchmarkId, PricePoint[]>>, ids: readonly BenchmarkId[], baseDate: string = start) {
   const rows: ComparisonRow[] = [];
   const base: Partial<Record<BenchmarkId, number | null>> = {};
-  for (const id of ids) { const h = histories[id]; base[id] = h ? closeAt(h, start) : null; }
+  for (const id of ids) { const h = histories[id]; base[id] = h ? closeAt(h, baseDate) : null; }
   points.forEach((p, i) => {
     if (p.date < start) return;
     const pv = perf[i] ?? null;
@@ -42,7 +42,9 @@ export function compareToBenchmarks(points: DayPoint[], perf: (number | null)[],
     rows.push(row);
   });
   // Summary on the last date common to the portfolio and every displayed index.
-  const common = [...rows].reverse().find(r => r.portfolio !== null && ids.every(id => r[id] !== null)) ?? null;
+  const found = [...rows].reverse().find(r => r.portfolio !== null && ids.every(id => r[id] !== null)) ?? null;
+  // Only the base date in common = no measured period: unavailable, not 0 %.
+  const common = found && (found !== rows[0] || rows.length === 1) ? found : null;
   const pPerf = common ? (common.portfolio as number) / 100 - 1 : null;
   const summary: ComparisonSummary[] = [{ id: "portfolio", perf: pPerf, gapPts: null, complete: rows.every(r => r.portfolio !== null), lastDate: common?.date ?? null }];
   for (const id of ids) {
@@ -50,4 +52,17 @@ export function compareToBenchmarks(points: DayPoint[], perf: (number | null)[],
     summary.push({ id, perf: v, gapPts: v === null || pPerf === null ? null : (pPerf - v) * 100, complete: base[id] != null && rows.every(r => r.portfolio === null || r[id] !== null), lastDate: common?.date ?? null });
   }
   return { rows, summary };
+}
+
+/**
+ * Account valued only on observed dates (financial registry): reuses its existing performance index,
+ * rebased at the last observation on/before the window start (or the first after it). Null index stays null.
+ */
+export function registryWindow(history: { date: string; performance: number | null }[], start: string) {
+  const before = history.filter(h => h.date <= start).at(-1);
+  const baseRow = before ?? history.find(h => h.date >= start) ?? null;
+  if (!baseRow) return null;
+  const pts = history.filter(h => h.date >= baseRow.date);
+  const b = baseRow.performance === null ? null : 1 + baseRow.performance / 100;
+  return { baseDate: baseRow.date, points: pts.map(h => ({ date: h.date })), perf: pts.map(h => b === null || h.performance === null ? null : (1 + h.performance / 100) / b - 1) };
 }

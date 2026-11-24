@@ -12,7 +12,9 @@ import { eur } from "@/lib/rebalance";
 import type { Portfolio } from "@/lib/portfolio";
 import type { Wealth } from "@/lib/wealth";
 import { ISIN_PATTERN, knownListings } from "@/lib/instrument-mapping";
-import { BENCHMARKS, BENCHMARK_CACHE_HOURS, BENCHMARK_KEY, compareToBenchmarks, type BenchmarkId } from "@/lib/benchmarks";
+import { BENCHMARKS, BENCHMARK_CACHE_HOURS, BENCHMARK_KEY, compareToBenchmarks, registryWindow, type BenchmarkId } from "@/lib/benchmarks";
+import { useFinancialRegistry } from "@/lib/use-financial-registry";
+import { registryHistory } from "@/lib/financial-registry";
 import { CONFIRMED_HISTORY_SYMBOLS, buildMoves, finalQuantities, dayBreakdown, PERIODS, reconstruct, SNAPSHOTS_KEY, snapshotsSchema, toEur, upsertSnapshot, windowPerformance, windowStart, type PeriodId, type PricePoint, type Snapshots } from "@/lib/performance";
 
 type Key = "global" | "pea" | "cto";
@@ -39,12 +41,15 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
   const [compare, setCompare] = useState(false);
   const [benchShown, setBenchShown] = useState<BenchmarkId[]>(["world"]);
   const [bench, setBench] = useState<{ from: string; at: string; checks: HistoryCheck[] } | null>(null);
+  const [target, setTarget] = useState<string>("global");
+  const [byAccount, setByAccount] = useState<Record<string, BenchmarkId>>({});
+  const { registry } = useFinancialRegistry(); // read only: never written from this chart
   const [benchLoading, setBenchLoading] = useState(false);
   const [benchErr, setBenchErr] = useState<string | null>(null);
   useEffect(() => {
-    try { const raw = localStorage.getItem(BENCHMARK_KEY); if (raw) { const v = JSON.parse(raw); if (typeof v.compare === "boolean") setCompare(v.compare); if (Array.isArray(v.shown)) setBenchShown(v.shown.filter((x: string) => BENCHMARKS.some(b => b.id === x))); if (v.cache?.checks) setBench(v.cache); } } catch { /* ignored: comparison cache only */ }
+    try { const raw = localStorage.getItem(BENCHMARK_KEY); if (raw) { const v = JSON.parse(raw); if (typeof v.compare === "boolean") setCompare(v.compare); if (Array.isArray(v.shown)) setBenchShown(v.shown.filter((x: string) => BENCHMARKS.some(b => b.id === x))); if (v.cache?.checks) setBench(v.cache); if (v.byAccount && typeof v.byAccount === "object") setByAccount(Object.fromEntries(Object.entries(v.byAccount).filter(([, b]) => BENCHMARKS.some(x => x.id === b))) as Record<string, BenchmarkId>); } } catch { /* ignored: comparison cache only */ }
   }, []);
-  function saveBench(next: { compare?: boolean; shown?: BenchmarkId[]; cache?: typeof bench }) {
+  function saveBench(next: { compare?: boolean; shown?: BenchmarkId[]; cache?: typeof bench; byAccount?: Record<string, BenchmarkId> }) {
     try { const prev = JSON.parse(localStorage.getItem(BENCHMARK_KEY) ?? "{}"); localStorage.setItem(BENCHMARK_KEY, JSON.stringify({ version: 1, ...prev, ...next })); } catch { /* comparison preferences only */ }
   }
 
@@ -118,12 +123,25 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
     } catch (e) { setBenchErr(e instanceof Error ? e.message : "Données indisponibles"); } finally { setBenchLoading(false); }
   }
   useEffect(() => { if (compare) void loadBench(); }, [compare, firstDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Comparison targets: consolidated portfolio, PEA, CTO, then every account created in Gestion (none invented).
+  const targets = useMemo(() => [{ id: "global", label: "Global (PEA + CTO)" }, { id: "pea", label: "PEA" }, { id: "cto", label: "CTO" }, ...registry.accounts.filter(a => !a.legacyId).map(a => ({ id: `reg:${a.id}`, label: a.name }))], [registry.accounts]);
+  const activeTarget = targets.some(t => t.id === target) ? target : "global";
+  const targetIds: BenchmarkId[] = activeTarget === "global" ? benchShown : [byAccount[activeTarget] ?? "world"];
   const comparison = useMemo(() => {
     if (!compare || !series || !start || !perf) return null;
     const hist: Partial<Record<BenchmarkId, PricePoint[]>> = {};
     for (const c of bench?.checks ?? []) if (!c.issues.length && c.points.length) hist[c.key as BenchmarkId] = c.points;
-    return compareToBenchmarks(series.global, perf.global, start, hist, benchShown);
-  }, [compare, series, start, perf, bench, benchShown]);
+    if (activeTarget === "global" || activeTarget === "pea" || activeTarget === "cto") {
+      const k = activeTarget as "global" | "pea" | "cto";
+      if (k !== "global" && !series[k].some(p => p.date >= start && p.value !== null && p.value !== 0)) return { unavailable: true as const };
+      return compareToBenchmarks(series[k], perf[k], start, hist, targetIds);
+    }
+    const w = registryWindow(registryHistory(registry, activeTarget.slice(4)), start);
+    if (!w || w.points.length < 2) return { unavailable: true as const };
+    return compareToBenchmarks(w.points, w.perf, w.baseDate, hist, targetIds, w.baseDate);
+  }, [compare, series, start, perf, bench, activeTarget, targetIds.join(), registry]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cmp = comparison && "rows" in comparison ? comparison : null;
+  const targetLabel = targets.find(t => t.id === activeTarget)?.label ?? "Global";
 
   // Daily snapshot of today's reconstructed values, only once enabled and only when complete.
   useEffect(() => {
@@ -212,27 +230,30 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
       <p className="text-xs text-muted-foreground">Début : {fr(start)} · Dernière donnée : {fr(last?.date ?? null)} · Dernière clôture non reportée : {fr(lastFresh?.date ?? null)} · Cours récupérés le {data ? new Date(data.at).toLocaleString("fr-FR") : "—"}</p>
 
       {compare && <div className="space-y-2">
-        <div role="group" aria-label="Indices" className="flex flex-wrap gap-1">{BENCHMARKS.map(b => { const on = benchShown.includes(b.id); return <Button key={b.id} size="sm" variant={on ? "secondary" : "outline"} aria-pressed={on} onClick={() => { const n = on ? benchShown.filter(x => x !== b.id) : [...benchShown, b.id]; setBenchShown(n); saveBench({ shown: n }); }}><span className="size-2 rounded-full" style={{ background: b.color }} />{b.label}</Button>; })}
+        <div role="group" aria-label="Comparer" className="flex flex-wrap gap-1">{targets.map(t => <Button key={t.id} size="sm" variant={activeTarget === t.id ? "default" : "outline"} aria-pressed={activeTarget === t.id} onClick={() => setTarget(t.id)}>{t.label}</Button>)}</div>
+        <div role="group" aria-label="Indices" className="flex flex-wrap gap-1">{BENCHMARKS.map(b => { const on = targetIds.includes(b.id); return <Button key={b.id} size="sm" variant={on ? "secondary" : "outline"} aria-pressed={on} onClick={() => { if (activeTarget === "global") { const n = on ? benchShown.filter(x => x !== b.id) : [...benchShown, b.id]; setBenchShown(n); saveBench({ shown: n }); } else { const n = { ...byAccount, [activeTarget]: b.id }; setByAccount(n); saveBench({ byAccount: n }); } }}><span className="size-2 rounded-full" style={{ background: b.color }} />{b.label}</Button>; })}
           <Button size="sm" variant="ghost" onClick={() => void loadBench(true)} disabled={benchLoading}><RefreshCw className={benchLoading ? "animate-spin" : ""} />Actualiser les indices</Button></div>
         {benchErr && <p role="alert" className="text-sm text-destructive">Indices : {benchErr}</p>}
-        {comparison && <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-xs text-muted-foreground"><tr><th className="p-1">Base 100 au {fr(start)}</th><th className="p-1 text-right">Performance</th><th className="p-1 text-right">Écart portefeuille</th><th className="p-1">État</th></tr></thead>
-          <tbody>{comparison.summary.map(x => { const b = BENCHMARKS.find(y => y.id === x.id); const chk = bench?.checks.find(c => c.key === x.id); return <tr key={x.id} className="border-t border-border"><td className="p-1">{b ? b.label : "Portefeuille global (TWR)"}</td><td className="p-1 text-right tabular-nums">{x.perf === null ? "Données indisponibles" : pct(x.perf)}</td><td className="p-1 text-right tabular-nums">{b ? (x.gapPts === null ? "—" : `${x.gapPts >= 0 ? "+" : ""}${x.gapPts.toFixed(2)} pts`) : "—"}</td><td className="p-1 text-xs">{chk?.issues.length ? chk.issues.join(" ") : x.complete ? "Complet" : "Historique incomplet sur la période"}</td></tr>; })}</tbody></table>
-          <p className="text-xs text-muted-foreground">Comparaison arrêtée au {fr(comparison.summary[0]?.lastDate ?? null)}, dernière date commune au portefeuille et aux indices affichés. Indices récupérés le {bench ? new Date(bench.at).toLocaleString("fr-FR") : "—"}.</p></div>}
+        {activeTarget !== "global" && <p className="text-xs text-muted-foreground">Indice de référence de ce compte : un seul, choisi indépendamment des autres comptes.</p>}
+        {comparison && !cmp && <p role="status" className="rounded-md border border-border p-3 text-sm">{targetLabel} : comparaison pas encore disponible — historique insuffisant sur la période.</p>}
+        {cmp && <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-xs text-muted-foreground"><tr><th className="p-1">Base 100 au {fr(cmp.rows[0]?.date ?? start)}</th><th className="p-1 text-right">Performance</th><th className="p-1 text-right">Écart portefeuille</th><th className="p-1">État</th></tr></thead>
+          <tbody>{cmp.summary.map(x => { const b = BENCHMARKS.find(y => y.id === x.id); const chk = bench?.checks.find(c => c.key === x.id); return <tr key={x.id} className="border-t border-border"><td className="p-1">{b ? b.label : `${targetLabel} (TWR)`}</td><td className="p-1 text-right tabular-nums">{x.perf === null ? "Données indisponibles" : pct(x.perf)}</td><td className="p-1 text-right tabular-nums">{b ? (x.gapPts === null ? "—" : `${x.gapPts >= 0 ? "+" : ""}${x.gapPts.toFixed(2)} pts`) : "—"}</td><td className="p-1 text-xs">{chk?.issues.length ? chk.issues.join(" ") : x.complete ? "Complet" : "Historique incomplet sur la période"}</td></tr>; })}</tbody></table>
+          <p className="text-xs text-muted-foreground">Période : du {fr(cmp.rows[0]?.date ?? start)} au {fr(cmp.summary[0]?.lastDate ?? null)} (dernière date commune au compte et aux indices affichés). Indices récupérés le {bench ? new Date(bench.at).toLocaleString("fr-FR") : "—"}.</p></div>}
       </div>}
 
       <div className="h-72 w-full">
-        <ResponsiveContainer><LineChart data={comparison ? comparison.rows : rows} margin={{ left: 8, right: 8 }}>
+        <ResponsiveContainer><LineChart data={cmp ? cmp.rows : compare ? [] : rows} margin={{ left: 8, right: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="date" tickFormatter={d => fr(d).slice(0, 5)} fontSize={11} stroke="var(--muted-foreground)" minTickGap={24} />
-          <YAxis fontSize={11} stroke="var(--muted-foreground)" width={64} {...(comparison ? { domain: ["auto", "auto"] as [string, string] } : {})} tickFormatter={v => comparison ? Number(v).toFixed(0) : mode === "value" ? `${Math.round(v)} €` : `${Number(v).toFixed(1)} %`} />
-          <Tooltip contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", color: "var(--popover-foreground)" }} labelFormatter={(d, p) => `${fr(String(d))}${p?.[0]?.payload?.carried ? " · cours reporté" : ""}`} formatter={(v, n) => [v === null || v === undefined ? "—" : comparison ? Number(v).toFixed(2) : mode === "value" ? eur(Number(v)) : `${Number(v).toFixed(2)} %`, String(n)]} />
-          {comparison && <Line dataKey="portfolio" name="Portefeuille global (TWR, base 100)" stroke="var(--chart-1)" strokeWidth={3} dot={false} connectNulls={false} isAnimationActive={false} />}
-          {comparison && BENCHMARKS.filter(b => benchShown.includes(b.id)).map(b => <Line key={b.id} dataKey={b.id} name={`${b.label} (base 100)`} stroke={b.color} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls={false} isAnimationActive={false} />)}
-          {!comparison && SERIES.filter(s => shown.includes(s.id)).map(s => <Line key={s.id} type="linear" dataKey={s.id} name={`${s.label} — reconstitué`} stroke={s.color} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />)}
-          {!comparison && mode === "value" && SERIES.filter(s => shown.includes(s.id)).map(s => { const k = s.id === "global" ? "snapGlobal" : s.id === "pea" ? "snapPea" : "snapCto"; return <Line key={k} dataKey={k} name={`${s.label} — instantané enregistré`} stroke={s.color} strokeWidth={0} dot={{ r: 4, fill: s.color }} isAnimationActive={false} legendType="circle" />; })}
+          <YAxis fontSize={11} stroke="var(--muted-foreground)" width={64} {...(cmp ? { domain: ["auto", "auto"] as [string, string] } : {})} tickFormatter={v => cmp ? Number(v).toFixed(0) : mode === "value" ? `${Math.round(v)} €` : `${Number(v).toFixed(1)} %`} />
+          <Tooltip contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", color: "var(--popover-foreground)" }} labelFormatter={(d, p) => `${fr(String(d))}${p?.[0]?.payload?.carried ? " · cours reporté" : ""}`} formatter={(v, n) => [v === null || v === undefined ? "—" : cmp ? Number(v).toFixed(2) : mode === "value" ? eur(Number(v)) : `${Number(v).toFixed(2)} %`, String(n)]} />
+          {cmp && <Line dataKey="portfolio" name={`${targetLabel} (TWR, base 100)`} stroke="var(--chart-1)" strokeWidth={3} dot={false} connectNulls={false} isAnimationActive={false} />}
+          {cmp && BENCHMARKS.filter(b => targetIds.includes(b.id)).map(b => <Line key={b.id} dataKey={b.id} name={`${b.label} (base 100)`} stroke={b.color} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls={false} isAnimationActive={false} />)}
+          {!compare && SERIES.filter(s => shown.includes(s.id)).map(s => <Line key={s.id} type="linear" dataKey={s.id} name={`${s.label} — reconstitué`} stroke={s.color} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />)}
+          {!compare && mode === "value" && SERIES.filter(s => shown.includes(s.id)).map(s => { const k = s.id === "global" ? "snapGlobal" : s.id === "pea" ? "snapPea" : "snapCto"; return <Line key={k} dataKey={k} name={`${s.label} — instantané enregistré`} stroke={s.color} strokeWidth={0} dot={{ r: 4, fill: s.color }} isAnimationActive={false} legendType="circle" />; })}
         </LineChart></ResponsiveContainer>
       </div>
-      {comparison && <p className="text-xs text-muted-foreground">Comparaison en euros, base 100 au début de la période. Trait épais : portefeuille global (TWR existant, versements et retraits neutralisés). Pointillés : ETF capitalisants cotés en euros représentant chaque indice (dividendes réinvestis, frais de gestion de l’ETF déduits) — {BENCHMARKS.map(b => `${b.label} : ${b.product}, ${b.symbol}, ${b.place}`).join(" ; ")}. Une date manquante reste vide, jamais interpolée. Les indices ne sont jamais intégrés à la valeur du patrimoine ni aux allocations.</p>}
+      {cmp && <p className="text-xs text-muted-foreground">Comparaison en euros, base 100 au début de la période. Trait épais : compte ou portefeuille sélectionné (TWR existant, calculé séparément pour chaque compte et sur PEA + CTO cumulés pour Global, jamais par moyenne ; versements et retraits neutralisés, transferts internes compensés au niveau global). Comptes créés dans Gestion : performance de leurs valorisations datées, indisponible si un flux externe n’est pas documenté. Pointillés : ETF capitalisants cotés en euros représentant chaque indice (dividendes réinvestis, frais de gestion de l’ETF déduits) — {BENCHMARKS.map(b => `${b.label} : ${b.product}, ${b.symbol}, ${b.place}`).join(" ; ")}. Une date manquante reste vide, jamais interpolée. Les indices ne sont jamais intégrés à la valeur du patrimoine ni aux allocations.</p>}
       <p className="text-xs text-muted-foreground">Trait plein : valeurs reconstituées. Points : instantanés réellement enregistrés à l’ouverture de l’application. Les trous correspondent à des jours sans cours suffisants, jamais interpolés. Week-ends et jours fériés : dernière clôture connue, signalée « cours reporté ».</p>
       <p className="text-xs text-muted-foreground">Méthode : valeur = quantités × clôtures converties en euros (taux BCE) + espèces nettes. Performance pondérée par le temps : versements et retraits neutralisés ; dividendes, frais et taxes inclus. Global calculé sur PEA + CTO cumulés, jamais par moyenne. Solde initial : débute au premier mouvement documenté ({fr(moves[0]?.date ?? null)}) ; avant cette date, aucune donnée.</p>
     </>}
