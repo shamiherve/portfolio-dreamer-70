@@ -8,6 +8,7 @@ import { holdingError, holdingValue, unifiedLines, type Holding, type Wealth } f
 import { makeId } from "@/lib/portfolio";
 import { eur } from "@/lib/rebalance";
 import { field } from "./shared";
+import { AdditionalFinancial } from "./additional-financial";
 
 const blank = (w: Wealth): Holding => ({ id: makeId(), name: "", isin: "", ticker: "", exchange: "", accountId: w.accounts.find(a => a.id === "cto")?.id ?? w.accounts[0]!.id, classId: w.classes.find(c => c.id === "stocks")?.id ?? w.classes[0]!.id, kind: "quantity", currency: "EUR", quantity: 0, price: null, fxRate: 1, fractional: false, value: 0, priceDate: null });
 const num = (s: string) => s.trim() === "" ? NaN : Number(s.replace(",", "."));
@@ -74,5 +75,6 @@ export function PositionsManager() {
       <tfoot><tr><td colSpan={8} className="px-2 py-2 font-medium">Total (chaque position comptée une fois)</td><td className="px-2 py-2 font-mono font-medium">{eur(total)}</td><td /></tr></tfoot>
     </table></div>
     <p className="text-xs text-muted-foreground">Les ETF proviennent directement du Portefeuille ETF (source unique) ; les autres cours sont saisis manuellement.</p>
+    <AdditionalFinancial wealth={wealth} legacyTotal={total} />
   </main>;
 }

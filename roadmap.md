@@ -1,7 +1,7 @@
 # ETF dashboard finalization
-- [ ] Add isolated dynamic account/instrument management and append-only manual valuations, without changing existing allocation calculations.
-- [ ] Include the financial registry in validated complete backups and safe restoration; retain older formats.
-- [ ] Verify creation/edit/deactivation, historical values and unchanged PEA/CTO calculations on simulated data.
+- [x] Add isolated dynamic account/instrument management and append-only manual valuations, without changing existing allocation calculations; additional actual totals and history remain separately labelled.
+- [x] Include the financial registry and snapshots as optional validated complete-v2 sections with safe restoration; retain older formats and legacy journal recovery.
+- [x] Verify creation/edit/deactivation, historical values, unknown-flow performance safeguards and unchanged PEA/CTO calculations on simulated data; isolated desktop/mobile flow includes downloaded backup restoration. Actual habitual-browser data inaccessible and untouched.
 - [x] Secure full restoration with validation, automatic safety copy, rollback and compatible legacy backups; verified with synthetic restoration and failure tests.
 - [x] Add an independent local financial ledger and CSV/Excel mapping, review, duplicates and cash reconciliation; never update holdings. Source reports include all sheets and distinguish incomplete rows from importable events.
 - [x] Test restoration failures, imports, existing ETF duplicates, fractions, dividends, fees/taxes, Embraer split, dates and cash; 156 tests pass, synthetic confirmation/restore flows and real-workbook read-only desktop/mobile preview verified.

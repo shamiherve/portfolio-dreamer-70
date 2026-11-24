@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AllocationRouteImport } from './routes/allocation'
+import { Route as GestionRouteImport } from './routes/gestion'
 import { Route as HistoriqueRouteImport } from './routes/historique'
 import { Route as InstrumentsRouteImport } from './routes/instruments'
 import { Route as PatrimoineRouteImport } from './routes/patrimoine'
@@ -26,6 +27,11 @@ const IndexRoute = IndexRouteImport.update({
 const AllocationRoute = AllocationRouteImport.update({
   id: '/allocation',
   path: '/allocation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GestionRoute = GestionRouteImport.update({
+  id: '/gestion',
+  path: '/gestion',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoriqueRoute = HistoriqueRouteImport.update({
@@ -62,6 +68,7 @@ const TargetsRoute = TargetsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/allocation': typeof AllocationRoute
+  '/gestion': typeof GestionRoute
   '/historique': typeof HistoriqueRoute
   '/instruments': typeof InstrumentsRoute
   '/patrimoine': typeof PatrimoineRoute
@@ -72,6 +79,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/allocation': typeof AllocationRoute
+  '/gestion': typeof GestionRoute
   '/historique': typeof HistoriqueRoute
   '/instruments': typeof InstrumentsRoute
   '/patrimoine': typeof PatrimoineRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/allocation': typeof AllocationRoute
+  '/gestion': typeof GestionRoute
   '/historique': typeof HistoriqueRoute
   '/instruments': typeof InstrumentsRoute
   '/patrimoine': typeof PatrimoineRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/allocation'
+    | '/gestion'
     | '/historique'
     | '/instruments'
     | '/patrimoine'
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/allocation'
+    | '/gestion'
     | '/historique'
     | '/instruments'
     | '/patrimoine'
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/allocation'
+    | '/gestion'
     | '/historique'
     | '/instruments'
     | '/patrimoine'
@@ -126,6 +138,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AllocationRoute: typeof AllocationRoute
+  GestionRoute: typeof GestionRoute
   HistoriqueRoute: typeof HistoriqueRoute
   InstrumentsRoute: typeof InstrumentsRoute
   PatrimoineRoute: typeof PatrimoineRoute
@@ -148,6 +161,13 @@ declare module '@tanstack/react-router' {
       path: '/allocation'
       fullPath: '/allocation'
       preLoaderRoute: typeof AllocationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gestion': {
+      id: '/gestion'
+      path: '/gestion'
+      fullPath: '/gestion'
+      preLoaderRoute: typeof GestionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/historique': {
@@ -198,6 +218,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AllocationRoute: AllocationRoute,
+  GestionRoute: GestionRoute,
   HistoriqueRoute: HistoriqueRoute,
   InstrumentsRoute: InstrumentsRoute,
   PatrimoineRoute: PatrimoineRoute,

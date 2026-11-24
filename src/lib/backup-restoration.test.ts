@@ -5,6 +5,7 @@ import { initialWealth, WEALTH_KEY } from "./wealth";
 import { LEDGER_KEY, emptyLedger, eventSchema } from "./ledger";
 import { appendLedger, generateCompleteBackup, parseRestoration, readCompleteBackup, restoreBackup, snapshot } from "./backup-restoration";
 import { DATA_KEYS, JOURNAL_KEY, SAFETY_KEY, recoverLocalTransaction, type LocalStorageAccess } from "./local-transaction";
+import { emptyRegistry } from "./financial-registry";
 
 const at = "2026-11-24T12:00:00.000Z";
 function fixture() {
@@ -37,7 +38,8 @@ describe("Full restoration with safety and rollback", () => {
     const s = store(); const before = snapshot(s); const { base } = fixture(); base.portfolio.budget = 999; base.theme = null;
     const target = generateCompleteBackup(base, emptyLedger());
     if (failedKey === "equilibre.theme.v1") base.theme = "light";
-    const actual = generateCompleteBackup(base, emptyLedger()); s.failAt = failedKey;
+    const extras = { financialRegistry: emptyRegistry(), snapshots: { version: 1 as const, enabledAt: at, backupAt: at, items: [] } };
+    const actual = generateCompleteBackup(base, emptyLedger(), extras); s.failAt = failedKey;
     expect(() => restoreBackup(s, parseRestoration(actual.content), before)).toThrow(/retour intégral/);
     expect(snapshot(s)).toEqual(before); expect(s.getItem(JOURNAL_KEY)).toBeNull(); expect(() => parseRestoration(s.getItem(SAFETY_KEY) ?? "")).not.toThrow();
   });

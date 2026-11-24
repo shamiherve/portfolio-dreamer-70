@@ -8,6 +8,7 @@ import { useWealth } from "@/lib/use-wealth";
 import { useMarket } from "@/lib/use-market";
 import { QuoteStatusPanel } from "./quote-status";
 import { WealthEvolution } from "./wealth-evolution";
+import { AdditionalFinancial } from "./additional-financial";
 import { analyse, bestAccount, recommendations, simulateContribution, ETF_ACCOUNT, ETF_CLASS, type Wealth } from "@/lib/wealth";
 import { ALL_ACCOUNTS, minimalToTargets, optimizeAllAccounts, type CellSplit } from "@/lib/contribution";
 import { wholeUnitProposal, scoreLabel } from "@/lib/whole-unit";
@@ -64,6 +65,7 @@ export function WealthDashboard() {
       {a.accountRows.map(r => <Stat key={r.id} label={r.name} value={eur(r.value)} hint={`${fmtPct(r.actual)} actuel · cible ${fmtPct(r.target)}`} />)}
     </section>
     <WealthEvolution portfolio={portfolio} wealth={wealth} />
+    <AdditionalFinancial wealth={wealth} legacyTotal={a.total} />
     {causes.length > 0 && <p className="text-sm text-muted-foreground">Principales causes d’écart : {causes.map(c => `${c.name} (${fmtPp(c.diffPp)})`).join(" ; ")}.</p>}
 
     <section className="space-y-3"><h2 className="text-lg font-semibold">Allocation</h2>
