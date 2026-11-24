@@ -11,7 +11,7 @@
 
 ## Portfolio architecture
 - Keep full-backup v1 validation intact and wrap it with v2 ledger-aware backup/restoration; validate again before writes, keep legacy restore scopes explicit, and journal multi-key local writes with a verified safety copy and recovery before hydration to prevent partial restoration.
-- Keep historical financial events in a separate versioned local ledger; imports parse CSV/Excel locally, retain source rows and separate execution/settlement dates, require reviewed confirmation, exclude existing ETF trades and duplicates, and never mutate current holdings or market providers.
+- Keep historical financial events in a separate versioned local ledger; imports parse CSV/Excel locally, retain source rows and separate execution/settlement dates, require reviewed confirmation, recheck the current browser's ETF trades and ledger at the write boundary, and never mutate holdings or market providers. Keep final-review logic separate, preserve unavailable execution prices as null, and reconstruct quantities from deduplicated events rather than adding them to current holdings.
 - Reject oversized spreadsheet archives before workbook parsing, preserve positional column mapping and raw numeric/date cells, and flag ambiguous operations/identities/FX rather than inferring financial events; keep source-sheet totals separate from accepted-ledger reconciliation so incomplete rows remain visible without being imported.
 - Keep the original generic simulation workbench separate from the ETF dashboard; both reuse the unchanged rebalance engine to preserve existing behavior.
 - Validate versioned portfolio backups before replacing any local data; persist only after hydration to prevent SSR overwrites.

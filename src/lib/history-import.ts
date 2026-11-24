@@ -130,7 +130,7 @@ export function recognizeOperation(s: string): OperationType | null {
 }
 export type RowOverride = { type?: OperationType; isin?: string; quantity?: string; executionPrice?: string; splitRatio?: string; ignore?: boolean; verifyInstrument?: boolean };
 export type ImportOptions = { accountId: "pea" | "cto"; broker: "fortuneo" | "trade-republic"; file: string; headerRow: number; mapping: Mapping; decimal: "comma" | "dot"; timezone: "Europe/Paris" | "UTC"; currency: string; amountBasis: "unknown" | "gross" | "net"; importedAt: string; overrides: Record<number, RowOverride>; inboundExternalConfirmed?: boolean; missingCurrencyConfirmed?: boolean };
-export type PreviewRow = { row: number; cells: ImportCell[]; facts: Partial<LedgerEvent>; recognizedType: OperationType | null; event: LedgerEvent | null; status: "valid" | "duplicate" | "existing-etf" | "review" | "ignored"; issues: string[] };
+export type PreviewRow = { row: number; cells: ImportCell[]; facts: Partial<LedgerEvent>; recognizedType: OperationType | null; event: LedgerEvent | null; status: "valid" | "duplicate" | "existing-etf" | "review" | "ignored"; issues: string[]; notes: string[] };
 export function previewHistory(sheet: ImportSheet, options: ImportOptions, portfolio: Portfolio, wealth: Wealth, ledger: Ledger) {
   const header = sheet.grid[options.headerRow - 1];
   if (!header?.some(c => c.text.trim())) throw new Error("Choisissez une ligne d’en-tête non vide.");
@@ -143,7 +143,7 @@ export function previewHistory(sheet: ImportSheet, options: ImportOptions, portf
     const cells = sheet.grid[i] ?? []; const row = i + 1;
     if (cells.every(c => !c.text.trim())) continue;
     const override = options.overrides[row];
-    const result: PreviewRow = { row, cells, facts: {}, recognizedType: null, event: null, status: "review", issues: [] };
+    const result: PreviewRow = { row, cells, facts: {}, recognizedType: null, event: null, status: "review", issues: [], notes: [] };
     rows.push(result);
     if (override?.ignore) { result.status = "ignored"; result.issues.push("Exclusion explicite."); continue; }
     const cell = (field: Field) => { const index = options.mapping[field]; return index === undefined ? null : cells[index] ?? null; };
@@ -166,7 +166,7 @@ export function previewHistory(sheet: ImportSheet, options: ImportOptions, portf
       if ((options.mapping.debit !== undefined || options.mapping.credit !== undefined) && !text("currency") && !options.missingCurrencyConfirmed) result.issues.push("Devise absente de l’export Fortuneo : confirmer EUR avant enregistrement.");
       const isin = (override?.isin ?? text("isin")).toUpperCase().replace(/\s/g, "") || null;
       const match = known.filter(p => p.accountId === options.accountId && p.isin === isin);
-      if (["buy", "sell", "split", "dividend"].includes(type) && (!isin || (match.length !== 1 && !override?.verifyInstrument))) result.issues.push("ISIN absent, inconnu dans ce compte ou présent plusieurs fois : vérification de l’instrument nécessaire.");
+      if (["buy", "sell", "split", "dividend"].includes(type) && (!isin || (match.length !== 1 && (options.accountId === "pea" || !override?.verifyInstrument)))) result.issues.push(options.accountId === "pea" ? "PEA : choisir exclusivement un ISIN existant et unique dans le référentiel de ce compte ; aucun instrument créé depuis un libellé." : "ISIN absent, inconnu dans ce compte ou présent plusieurs fois : vérification de l’instrument nécessaire.");
       const labelled = /^(?:achat|vente|dividende)\s+(\d+(?:[,.]\d+)?)\s+(.+)$/i.exec(text("type"));
       const instrumentName = match[0]?.name ?? (text("name") || labelled?.[2] || "");
       if (override?.verifyInstrument && match.length !== 1 && !instrumentName) result.issues.push("Instrument historique : nom et ISIN documentés requis pour une vérification explicite.");
@@ -188,7 +188,8 @@ export function previewHistory(sheet: ImportSheet, options: ImportOptions, portf
       if ((type === "fee" && fees > 0) || (type === "tax" && taxes > 0)) result.issues.push("Frais/taxe présents à la fois dans le montant et une colonne séparée : double comptage possible.");
       if (type === "split" && rawAmount !== null && rawAmount !== 0) result.issues.push("Split avec montant financier non nul : vérifier l’opération.");
       if (type === "buy" || type === "sell") {
-        if (quantity === null || executionPrice === null || Math.abs(quantity * executionPrice - amount) > Math.max(0.02, amount * 0.001)) result.issues.push("Montant brut différent de quantité × prix ; arrondi, devise ou montant net à vérifier.");
+        if (executionPrice === null) result.notes.push("Prix historique indisponible : montant et quantité documentés conservés ; aucun prix déduit.");
+        if (quantity === null || (executionPrice !== null && Math.abs(quantity * executionPrice - amount) > Math.max(0.02, amount * 0.001))) result.issues.push("Montant brut différent de quantité × prix ; arrondi, devise ou montant net à vérifier.");
         if (options.accountId === "pea" && quantity !== null && !Number.isInteger(quantity)) result.issues.push("PEA : quantité non entière.");
         if (options.accountId === "cto" && quantity !== null && Math.abs(quantity * 1e6 - Math.round(quantity * 1e6)) > 1e-7) result.issues.push("CTO : fraction supérieure à 6 décimales.");
       }
@@ -197,6 +198,9 @@ export function previewHistory(sheet: ImportSheet, options: ImportOptions, portf
       result.facts = { accountId: options.accountId, type, operationDate: date.date, settlementDate: settlement?.date ?? null, timestamp: exact?.timestamp ?? date.timestamp, isin, instrumentId: match[0]?.id ?? null, instrumentName, quantity, executionPrice, amount, fees, taxes, withholding, currency, fxRate, splitRatio: override?.splitRatio ? parseNumber(override.splitRatio, options.decimal) : number("splitRatio"), transferId: text("transferId") || null };
       const event = eventSchema.parse({ ...result.facts, id: crypto.randomUUID(), source: { broker: options.broker, file: options.file, sheet: sheet.name, row, reference: text("reference"), importedAt: options.importedAt, originalColumns: header.map((h, i) => ({ heading: h.text, value: cells[i]?.value instanceof Date ? cells[i]?.value.toISOString() ?? "" : cells[i]?.text ?? "" })) } });
       result.event = event;
+      // More complete second exports must not bypass an existing record with a null price or missing timestamp.
+      const possible = ledger.events.find(e => e.accountId === event.accountId && e.type === event.type && e.isin === event.isin && (e.operationDate === event.operationDate || e.operationDate === event.settlementDate || e.settlementDate === event.operationDate) && e.quantity === event.quantity && Math.abs(e.amount - event.amount) <= 0.02 && (e.timestamp === event.timestamp || e.timestamp === null || event.timestamp === null));
+      if (possible && eventKey(possible) !== eventKey(event)) { result.issues.push("Correspondance possible dans le grand livre local malgré des champs différents : doublon potentiel, ligne bloquée."); continue; }
       const key = eventKey(event); const ref = referenceKey(event);
       if (ref && refs.has(ref) && refs.get(ref) !== key) { result.issues.push("Même référence bancaire, mais données différentes : conflit à vérifier."); continue; }
       if (keys.has(key) || (ref && refs.has(ref))) { result.status = "duplicate"; result.issues.push("Déjà présent dans le grand livre ou ce fichier."); continue; }
@@ -204,6 +208,10 @@ export function previewHistory(sheet: ImportSheet, options: ImportOptions, portf
       if (existingEtf(event, portfolio)) { result.status = "existing-etf"; result.issues.push("Transaction ETF déjà enregistrée : exclue, aucune seconde transaction créée."); continue; }
       if (date.date < RECONCILIATION[options.accountId].since) result.issues.push(`Date antérieure au début déclaré (${RECONCILIATION[options.accountId].since}) : vérifier le périmètre.`);
       if (event.type === "split" && event.isin === "US29082A1079" && event.operationDate === "2026-11-16" && (event.splitRatio !== 4 || event.quantity !== 3)) result.issues.push("Embraer : le 16/11/2026, contrôle attendu ratio 4 et +3 ADR.");
+      if (event.type === "split" && event.isin === "US29082A1079" && event.operationDate === "2026-11-16") {
+        const current = wealth.holdings.filter(h => h.accountId === "cto" && h.isin === event.isin);
+        if (current.length === 1 && current[0] && Math.abs(current[0].quantity - 4) > 1e-6) result.issues.push("Embraer : la position locale n’est pas de 4 ADR ; écart à vérifier, aucune correction ni second split appliqué.");
+      }
       result.status = result.issues.length ? "review" : "valid";
     } catch (e) { result.issues.push(e instanceof Error ? e.message : "Ligne invalide."); }
   }

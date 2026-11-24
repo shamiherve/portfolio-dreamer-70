@@ -92,4 +92,16 @@ describe("Full restoration with safety and rollback", () => {
     expect(() => appendLedger(s, { ...ledger, events: [...ledger.events, { ...first, id: "duplicate" }] }, snapshot(s))).toThrow(/Doublons/);
     expect(() => appendLedger(s, emptyLedger(), snapshot(s))).toThrow(/supprimé/);
   });
+  it("rechecks actual local ETF transactions immediately before any append, including an unavailable execution price", () => {
+    const s = store(); const p = fixture().base.portfolio;
+    p.transactions = [{ id: "local-etf", positionId: "sp500", name: "ETF", type: "buy", quantity: 2, price: 30, date: "2026-02-01" }];
+    s.entries.set(PORTFOLIO_KEY, JSON.stringify(p)); const before = snapshot(s); const ledger = readCompleteBackup(s).backup.ledger; const first = ledger.events[0]; if (!first) throw new Error("fixture");
+    const buy = { ...first, id: "new-buy", type: "buy" as const, operationDate: "2026-02-01", settlementDate: null, isin: "FR0011550185", instrumentId: "etf:sp500", quantity: 2, executionPrice: null, amount: 60, source: { ...first.source, reference: "" } };
+    expect(() => appendLedger(s, { ...ledger, events: [...ledger.events, buy] }, before)).toThrow(/ETF déjà/); expect(snapshot(s)).toEqual(before); expect(s.writes).toEqual([]);
+  });
+  it("refuses a new unknown PEA instrument at the write boundary without altering any key", () => {
+    const s = store(); const before = snapshot(s); const ledger = readCompleteBackup(s).backup.ledger; const first = ledger.events[0]; if (!first) throw new Error("fixture");
+    const buy = { ...first, id: "unknown-buy", type: "buy" as const, isin: "FR0000120321", instrumentId: null, quantity: 1, executionPrice: null, amount: 20, source: { ...first.source, reference: "" } };
+    expect(() => appendLedger(s, { ...ledger, events: [...ledger.events, buy] }, before)).toThrow(/référentiel/); expect(snapshot(s)).toEqual(before); expect(s.writes).toEqual([]);
+  });
 });

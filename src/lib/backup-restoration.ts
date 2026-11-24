@@ -2,7 +2,7 @@ import { z } from "zod";
 import { parseFullBackup, readFullBackup, THEME_STORAGE_KEY, type FullBackup } from "./full-backup";
 import { parseBackup, PORTFOLIO_KEY, SIMULATIONS_KEY, type Backup } from "./portfolio";
 import { WEALTH_KEY } from "./wealth";
-import { ledgerSchema, readLedger, LEDGER_KEY, eventKey, referenceKey, type Ledger } from "./ledger";
+import { ledgerSchema, readLedger, LEDGER_KEY, eventKey, referenceKey, existingEtf, instruments, splitCheck, type Ledger } from "./ledger";
 import { atomicLocalWrite, snapshot, type LocalStorageAccess } from "./local-transaction";
 
 export type CompleteBackup = Omit<FullBackup, "version"> & { version: 2; ledger: Ledger };
@@ -56,6 +56,14 @@ export function appendLedger(storage: LocalStorageAccess, ledger: Ledger, expect
   if (new Set(keys).size !== keys.length || new Set(refs).size !== refs.length) throw new Error("Doublons dans le grand livre : enregistrement refusé.");
   const before = readLedger(storage);
   if (before.events.some(e => !next.events.some(n => JSON.stringify(n) === JSON.stringify(e)))) throw new Error("Import refusé : un événement existant serait modifié ou supprimé.");
+  const known = instruments(safety.backup.portfolio, safety.backup.wealth);
+  const incoming = next.events.filter(e => !before.events.some(old => old.id === e.id));
+  for (const e of incoming) {
+    if (e.accountId === "pea" && ["buy", "sell", "dividend", "split"].includes(e.type) && known.filter(k => k.accountId === "pea" && k.isin === e.isin && k.id === e.instrumentId).length !== 1) throw new Error("PEA : instrument absent du référentiel local ; écriture refusée.");
+    if (existingEtf(e, safety.backup.portfolio)) throw new Error("Transaction ETF déjà présente dans ce navigateur : écriture refusée.");
+    if (before.events.some(old => old.accountId === e.accountId && old.type === e.type && old.isin === e.isin && old.operationDate === e.operationDate && old.quantity === e.quantity && Math.abs(old.amount - e.amount) <= 0.02 && (old.timestamp === e.timestamp || old.timestamp === null || e.timestamp === null))) throw new Error("Doublon potentiel dans le grand livre local : écriture refusée.");
+  }
+  if (incoming.some(e => e.type === "split" && e.isin === "US29082A1079") && splitCheck(next.events).issues.length) throw new Error("Split Embraer incohérent ou répété : écriture refusée.");
   atomicLocalWrite(storage, { [LEDGER_KEY]: JSON.stringify(next) }, safety.content, expected);
 }
 export { snapshot };

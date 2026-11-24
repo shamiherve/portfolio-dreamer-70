@@ -22,7 +22,7 @@ export const eventSchema = z.object({
   source: z.object({ broker: z.enum(["fortuneo", "trade-republic"]), file: z.string(), sheet: z.string(), row: z.number().int().positive(), reference: z.string(), importedAt: z.string().datetime(), originalColumns: z.array(z.object({ heading: z.string(), value: z.string() }).strict()).optional() }).strict(),
 }).strict().superRefine((e, ctx) => {
   const issue = (message: string) => ctx.addIssue({ code: "custom", message });
-  if (["buy", "sell"].includes(e.type) && (!e.isin || !e.quantity || e.executionPrice === null || e.executionPrice <= 0 || e.amount <= 0)) issue("Achat/vente incomplet : ISIN, quantité, prix et montant requis.");
+  if (["buy", "sell"].includes(e.type) && (!e.isin || !e.quantity || (e.executionPrice !== null && e.executionPrice <= 0) || e.amount <= 0)) issue("Achat/vente incomplet : ISIN, quantité et montant requis ; un prix indisponible reste null.");
   if (e.currency === "EUR" && e.fxRate !== 1) issue("Taux EUR attendu : 1.");
   if (e.type === "split" && (!e.isin || !e.splitRatio || e.splitRatio === 1 || e.quantity === null || e.amount !== 0 || e.fees !== 0 || e.taxes !== 0 || e.withholding !== 0)) issue("Split : ISIN, ratio et variation de quantité requis ; aucun flux financier.");
   if (e.type.startsWith("transfer_") && !e.transferId) issue("Transfert : référence commune des deux mouvements requise.");
@@ -45,7 +45,7 @@ export function eventKey(e: LedgerEvent) {
 export function referenceKey(e: LedgerEvent) { return e.source.reference ? `${e.accountId}\u0000${e.source.broker}\u0000${e.source.reference}\u0000${e.type}` : null; }
 export function existingEtf(e: LedgerEvent, portfolio: Portfolio) {
   if (e.accountId !== "pea" || (e.type !== "buy" && e.type !== "sell")) return null;
-  return portfolio.transactions.find(t => t.type === e.type && (t.date === e.operationDate || t.date === e.settlementDate) && t.quantity === e.quantity && e.executionPrice !== null && Math.abs(t.price * t.quantity - e.amount) <= 0.02 && portfolio.positions.find(p => p.id === t.positionId)?.isin === e.isin) ?? null;
+  return portfolio.transactions.find(t => t.type === e.type && (t.date === e.operationDate || t.date === e.settlementDate) && t.quantity === e.quantity && Math.abs(t.price * t.quantity - e.amount) <= 0.02 && portfolio.positions.find(p => p.id === t.positionId)?.isin === e.isin) ?? null;
 }
 export const RECONCILIATION = {
   pea: { deposit: 1515, buy: 1523.56, fees: 0, taxes: 1.12, dividend: 4.10, balance: -5.58, since: "2026-01-01" },
