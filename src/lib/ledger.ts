@@ -79,4 +79,9 @@ export function splitCheck(events: LedgerEvent[]) {
     }
   }
   return { quantity, issues };
+}/** User-declared PEA CAC 40 round trip missing from the export (24/11/2026): control only, never a ledger event or position. */
+export const PEA_OMITTED_ROUND_TRIP = { instrument: "Part CAC 40 (achat puis vente, dénouée)", buy: 79.62, sell: 85.29, observedCash: 0.09 } as const;
+export function peaReconstructedCash(fileBalance: number) {
+  const reconstructed = Math.round((fileBalance - PEA_OMITTED_ROUND_TRIP.buy + PEA_OMITTED_ROUND_TRIP.sell) * 100) / 100;
+  return { reconstructed, gap: Math.round((reconstructed - PEA_OMITTED_ROUND_TRIP.observedCash) * 100) / 100, netQuantity: 0 };
 }

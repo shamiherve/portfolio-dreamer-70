@@ -75,3 +75,9 @@ describe("Confirmed reference quantities", () => {
     expect(REFERENCE_QUANTITIES.find(r => r.isin === "US29082A1079")?.quantity).toBe(4);
   });
 });
+import { peaReconstructedCash, RECONCILIATION } from "./ledger";
+describe("PEA CAC 40 omitted round trip", () => {
+  it("reconstructs +0,09 € from −5,58 € with buy 79,62 € and sell 85,29 €, no residual gap or position", () => {
+    expect(peaReconstructedCash(RECONCILIATION.pea.balance)).toEqual({ reconstructed: 0.09, gap: 0, netQuantity: 0 });
+  });
+});
