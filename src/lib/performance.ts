@@ -46,6 +46,28 @@ export function buildMoves(events: LedgerEvent[], portfolio: Portfolio) {
   return { moves, issues };
 }
 
+export interface LedgerSplit { isin: string; date: string; ratio: number }
+/** Ledger splits with their ratio (quantity after / before), derived from the reconstructed quantities. */
+export function ledgerSplits(moves: Move[]): LedgerSplit[] {
+  const q = new Map<string, number>(); const out: LedgerSplit[] = [];
+  for (const m of moves) {
+    if (!m.isin || !m.dq) continue;
+    const k = `${m.account}|${m.isin}`; const before = q.get(k) ?? 0;
+    if (m.label === "split" && before > 0) out.push({ isin: m.isin, date: m.date, ratio: (before + m.dq) / before });
+    q.set(k, before + m.dq);
+  }
+  return out;
+}
+/** Window (days) within which a provider-reported split is considered the same as the ledger split. */
+export const SPLIT_MATCH_DAYS = 10;
+/** Option A (validated 25/11/2026): when the provider does not report a ledger split, closes from the split date are
+ * still pre-split per-unit prices; divide them by the ratio so value is continuous. Never applied twice. */
+export function alignSplits(points: PricePoint[], isin: string, splits: LedgerSplit[], providerSplits: string[]) {
+  const todo = splits.filter(s => s.isin === isin && Math.abs(s.ratio - 1) > 1e-9 && !providerSplits.some(d => Math.abs(day(d) - day(s.date)) / 864e5 <= SPLIT_MATCH_DAYS));
+  if (!todo.length) return { points, applied: [] as LedgerSplit[] };
+  return { applied: todo, points: points.map(p => { const f = todo.filter(s => p.date >= s.date).reduce((a, s) => a * s.ratio, 1); return f === 1 ? p : { date: p.date, close: p.close / f }; }) };
+}
+
 export interface DayPoint { date: string; value: number | null; flow: number; missing: string[]; carried: string[]; cash: number }
 export type Series = Record<AccountId | "global", DayPoint[]>;
 

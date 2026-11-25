@@ -15,7 +15,7 @@ import { ISIN_PATTERN, knownListings } from "@/lib/instrument-mapping";
 import { BENCHMARKS, BENCHMARK_CACHE_HOURS, BENCHMARK_KEY, compareToBenchmarks, registryWindow, type BenchmarkId } from "@/lib/benchmarks";
 import { useFinancialRegistry } from "@/lib/use-financial-registry";
 import { registryHistory } from "@/lib/financial-registry";
-import { CONFIRMED_HISTORY_SYMBOLS, buildMoves, finalQuantities, dayBreakdown, PERIODS, reconstruct, SNAPSHOTS_KEY, snapshotsSchema, toEur, upsertSnapshot, windowPerformance, windowStart, type PeriodId, type PricePoint, type Snapshots } from "@/lib/performance";
+import { CONFIRMED_HISTORY_SYMBOLS, alignSplits, ledgerSplits, buildMoves, finalQuantities, dayBreakdown, PERIODS, reconstruct, SNAPSHOTS_KEY, snapshotsSchema, toEur, upsertSnapshot, windowPerformance, windowStart, type PeriodId, type PricePoint, type Snapshots } from "@/lib/performance";
 
 type Key = "global" | "pea" | "cto";
 const SERIES: { id: Key; label: string; color: string }[] = [
@@ -90,13 +90,14 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
   const requestKey = JSON.stringify([moves[0]?.date, instruments.map(i => [i.key, i.symbol, i.currency])]);
   useEffect(() => { if (events && moves.length) void load(); }, [requestKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const splits = useMemo(() => ledgerSplits(moves), [moves]);
   const prices = useMemo(() => {
     const map = new Map<string, PricePoint[]>();
     if (!data) return map;
     for (const c of data.checks) {
       const inst = instruments.find(i => i.key === c.key);
       if (!inst || !c.points.length) continue;
-      let pts = toEur(c.points, inst.currency, data.fx[inst.currency]);
+      let pts = toEur(alignSplits(c.points, inst.isin, splits, c.providerSplits ?? []).points, inst.currency, data.fx[inst.currency]);
       // Euronext closes already recorded in the browser complete days Yahoo lacks; never override Yahoo.
       if (inst.currency === "EUR") {
         const extra = (portfolio.quoteHistory ?? []).filter(q => q.isin === inst.isin).map(q => ({ date: q.tradeTimestamp.slice(0, 10), close: q.price })).filter(q => !pts.some(p => p.date === q.date));
@@ -105,7 +106,7 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
       map.set(inst.isin, pts);
     }
     return map;
-  }, [data, instruments, portfolio.quoteHistory]);
+  }, [data, instruments, portfolio.quoteHistory, splits]);
   const names = useMemo(() => new Map(instruments.map(i => [i.isin, i.name])), [instruments]);
   const series = useMemo(() => data ? reconstruct(moves, prices, today(), names) : null, [data, moves, prices, names]);
   const start = series ? windowStart(period, series.global) : null;

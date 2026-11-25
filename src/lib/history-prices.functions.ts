@@ -17,7 +17,7 @@ async function get(url: string) {
   }
   throw new Error("Fournisseur indisponible");
 }
-export interface HistoryCheck { key: string; isin: string; symbol: string | null; exchange: string | null; currency: string | null; points: { date: string; close: number }[]; first: string | null; issues: string[] }
+export interface HistoryCheck { key: string; isin: string; symbol: string | null; exchange: string | null; currency: string | null; points: { date: string; close: number }[]; first: string | null; issues: string[]; providerSplits?: string[] }
 
 type ChartJson = { chart?: { result?: { meta?: { symbol?: string; currency?: string; exchangeName?: string; gmtoffset?: number }; timestamp?: number[]; indicators?: { quote?: { close?: (number | null)[] }[] }; events?: { splits?: Record<string, { date: number; numerator: number; denominator: number }> } }[] } };
 
@@ -33,7 +33,8 @@ export function parseHistory(j: ChartJson) {
     return [{ date: new Date((t + off) * 1000).toISOString().slice(0, 10), close: c * factor }];
   });
   const dedup = new Map(points.map(p => [p.date, p]));
-  return { symbol: meta.symbol ?? "", currency: meta.currency ?? "", exchange: meta.exchangeName ?? "", points: [...dedup.values()].sort((a, b) => a.date.localeCompare(b.date)) };
+  const providerSplits = splits.map(sp => new Date((sp.date + off) * 1000).toISOString().slice(0, 10)).sort();
+  return { providerSplits, symbol: meta.symbol ?? "", currency: meta.currency ?? "", exchange: meta.exchangeName ?? "", points: [...dedup.values()].sort((a, b) => a.date.localeCompare(b.date)) };
 }
 
 const item = z.object({ key: z.string().max(80), isin: z.string().regex(/^[A-Z]{2}[A-Z0-9]{9}\d$/), symbol: z.string().regex(/^[A-Za-z0-9.^=-]{1,20}$/).nullable(), currency: z.string().regex(/^[A-Z]{3}$/) });
@@ -56,7 +57,7 @@ export const fetchHistory = createServerFn({ method: "POST" })
         c.exchange = h.exchange; c.currency = h.currency;
         if (h.symbol.toUpperCase() !== c.symbol.toUpperCase()) c.issues.push("Le symbole renvoyé ne correspond pas au symbole demandé.");
         else if (h.currency !== it.currency) c.issues.push(`Devise de cotation ${h.currency} différente de la devise attendue ${it.currency}.`);
-        else { c.points = h.points; c.first = h.points[0]?.date ?? null; if (!h.points.length) c.issues.push("Aucun cours historique disponible."); }
+        else { c.points = h.points; c.providerSplits = h.providerSplits ?? []; c.first = h.points[0]?.date ?? null; if (!h.points.length) c.issues.push("Aucun cours historique disponible."); }
       } catch (e) { c.issues.push(e instanceof Error ? e.message : "Historique indisponible"); }
       checks.push(c);
     }
