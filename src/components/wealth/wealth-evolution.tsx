@@ -11,6 +11,7 @@ import { downloadJson } from "@/components/portfolio/target-editor";
 import { eur } from "@/lib/rebalance";
 import type { Portfolio } from "@/lib/portfolio";
 import type { Wealth } from "@/lib/wealth";
+import { periodGain, periodMwr, totalGain, signedEur, signedPct, tone } from "@/lib/performance-display";
 import { ISIN_PATTERN, knownListings } from "@/lib/instrument-mapping";
 import { BENCHMARKS, BENCHMARK_CACHE_HOURS, BENCHMARK_KEY, compareToBenchmarks, registryWindow, type BenchmarkId } from "@/lib/benchmarks";
 import { useFinancialRegistry } from "@/lib/use-financial-registry";
@@ -204,7 +205,7 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
   const summary = (k: Key) => {
     if (!series || !perf) return null;
     const pts = series[k]; const i0 = pts.findIndex(p => p.date >= (start ?? ""));
-    return { value: pts.at(-1)?.value ?? null, perf: perf[k].at(-1) ?? null, startValue: i0 >= 0 ? pts[i0]!.value : null };
+    return { value: pts.at(-1)?.value ?? null, perf: perf[k].at(-1) ?? null, startValue: i0 >= 0 ? pts[i0]!.value : null, gain: start ? periodGain(pts, start) : null, mwr: start ? periodMwr(pts, start) : null, total: totalGain(pts) };
   };
 
   return <section className="space-y-4 rounded-lg border border-border bg-surface p-4" aria-labelledby="evolution-title">
@@ -227,10 +228,15 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
     {loading && !data && <p className="text-sm text-muted-foreground">Récupération des cours historiques…</p>}
 
     {series && <>
-      <div className="grid gap-3 text-sm sm:grid-cols-3">{SERIES.filter(s => shown.includes(s.id)).map(s => { const x = summary(s.id); return <div key={s.id} className="rounded-md border border-border p-3">
-        <p className="text-xs text-muted-foreground">{s.label}</p>
-        <p className="text-lg font-semibold tabular-nums">{x?.value === null || x?.value === undefined ? "Valorisation indisponible" : eur(x.value)}</p>
-        <p className="tabular-nums text-muted-foreground">Performance période (TWR) : {pct(x?.perf ?? null)}</p></div>; })}</div>
+      <div className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">{SERIES.filter(s => shown.includes(s.id)).map(s => { const x = summary(s.id); return <div key={s.id} className="space-y-2 rounded-md border border-border p-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2"><p className="text-xs text-muted-foreground">{s.label}</p>
+          <p className="text-lg font-semibold tabular-nums">{x?.value === null || x?.value === undefined ? "Valorisation indisponible" : eur(x.value)}</p></div>
+        <Indicator label="Performance des placements" method="TWR" pct={x?.perf ?? null} amount={x?.gain ?? null} accent="border-l-primary" />
+        <Indicator label="Rendement de mon argent" method="MWR (TRI)" pct={x?.mwr ?? null} amount={x?.gain ?? null} accent="border-l-info" />
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-t border-border pt-2"><span className="text-xs text-muted-foreground">Plus-value totale</span>
+          <span className={`font-semibold tabular-nums ${tone(x?.total ?? null)}`}>{x?.total === null || x?.total === undefined ? "Indisponible" : signedEur(x.total)}</span></div>
+      </div>; })}</div>
+      <p className="text-xs text-muted-foreground">TWR : performance des placements, versements neutralisés (courbe). MWR (TRI) : rendement de votre argent, pondéré par les dates et montants des versements, cumulé sur la période. Gain ou perte de la période = valeur finale − valeur de début − versements nets. Plus-value totale = valeur finale − versements nets depuis le premier mouvement. Une valeur inconnue reste « Indisponible ».</p>
 
       <p className="text-xs text-muted-foreground">Début : {fr(start)} · Dernière donnée : {fr(last?.date ?? null)} · Dernière clôture non reportée : {fr(lastFresh?.date ?? null)} · Cours récupérés le {data ? new Date(data.at).toLocaleString("fr-FR") : "—"}</p>
 
@@ -291,4 +297,14 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
         : <><Button size="sm" variant="outline" onClick={enableSnapshots}>Sauvegarder puis activer les instantanés quotidiens</Button><span className="text-xs text-muted-foreground">Télécharge d’abord une sauvegarde complète ; seuls les instantanés sont ensuite enregistrés, dans un emplacement séparé.</span></>}
     </div>
   </section>;
+}
+
+function Indicator({ label, method, pct, amount, accent }: { label: string; method: string; pct: number | null; amount: number | null; accent: string }) {
+  return <div className={`rounded-sm border-l-4 ${accent} bg-muted/40 px-2 py-1.5`}>
+    <p className="text-xs"><span className="font-medium">{label}</span> <span className="text-muted-foreground">· {method}</span></p>
+    <p className="flex flex-wrap items-baseline gap-x-3 tabular-nums">
+      <span className={`text-base font-semibold ${tone(pct, 4)}`}>{pct === null ? "Indisponible" : signedPct(pct)}</span>
+      <span className={tone(amount)}>{amount === null ? "Gain indisponible" : signedEur(amount)}</span>
+    </p>
+  </div>;
 }
