@@ -62,11 +62,11 @@ export type PriceConvention = "raw" | "split-adjusted" | "unknown";
 export interface ProviderSplit { date: string; numerator: number; denominator: number }
 /** Never infer an adjustment convention or event identity from price levels or nearby dates.
  * Unknown split series are unavailable; trusted adjusted series are normalised once to ledger units. */
-export function alignSplits(points: PricePoint[], isin: string, splits: LedgerSplit[], providerSplits: readonly (ProviderSplit | string)[], convention: PriceConvention = "unknown") {
+export function alignSplits(points: PricePoint[], isin: string, splits: LedgerSplit[], providerSplits: readonly (ProviderSplit | string)[], convention: PriceConvention = "unknown", firstHeld: string | null = null) {
   const relevant = splits.filter(s => s.isin === isin && Math.abs(s.ratio - 1) > 1e-9);
   const unavailable = (reason: string) => ({ points: [] as PricePoint[], applied: [] as LedgerSplit[], available: false, reason });
   if (!relevant.length && !providerSplits.length) return { points, applied: [] as LedgerSplit[], available: true, reason: null };
-  if (convention === "unknown") return unavailable("Convention des cours autour du split non établie : valorisation indisponible.");
+  if (convention === "unknown") return alignUnknown(points, relevant, providerSplits, firstHeld, unavailable);
   if (relevant.some(s => !Number.isFinite(s.ratio) || s.ratio <= 0) || new Set(relevant.map(s => s.date)).size !== relevant.length) return unavailable("Splits du grand livre ambigus : valorisation indisponible.");
   const events: ProviderSplit[] = [];
   for (const event of providerSplits) {
@@ -77,6 +77,31 @@ export function alignSplits(points: PricePoint[], isin: string, splits: LedgerSp
   if (convention === "raw") return { points, applied: [] as LedgerSplit[], available: true, reason: null };
   if (events.length !== relevant.length || relevant.some(s => !events.some(e => e.date === s.date && Math.abs(s.ratio - e.numerator / e.denominator) < 1e-9))) return unavailable("Correspondance des splits ajustés non établie : valorisation indisponible.");
   return { available: true, reason: null, applied: relevant, points: points.map(p => ({ date: p.date, close: p.close * relevant.filter(s => p.date < s.date).reduce((f, s) => f * s.ratio, 1) })) };
+}
+
+const evDate = (e: ProviderSplit | string) => typeof e === "string" ? e : e.date;
+/** Unknown Yahoo convention: provider splits dated on/before the first holding only cut the series to their post-event closes
+ * (identical in both conventions); splits during the holding need an exact ledger match (date + ratio) and a raw price jump
+ * between adjacent closes (≤ MAX_CARRY_DAYS from the split) consistent with the ratio. Closes are never rescaled. */
+function alignUnknown(points: PricePoint[], relevant: LedgerSplit[], providerSplits: readonly (ProviderSplit | string)[], firstHeld: string | null, unavailable: (reason: string) => { points: PricePoint[]; applied: LedgerSplit[]; available: boolean; reason: string }) {
+  const before = firstHeld ? providerSplits.filter(e => evDate(e) <= firstHeld) : [];
+  const during = providerSplits.filter(e => !before.includes(e));
+  const cut = before.map(evDate).sort().at(-1);
+  const pts = cut ? points.filter(p => p.date >= cut) : points;
+  if (!relevant.length && !during.length) return { points: pts, applied: [] as LedgerSplit[], available: true, reason: null };
+  if (relevant.some(s => !Number.isFinite(s.ratio) || s.ratio <= 0) || new Set(relevant.map(s => s.date)).size !== relevant.length) return unavailable("Splits du grand livre ambigus : valorisation indisponible.");
+  const events: ProviderSplit[] = [];
+  for (const e of during) {
+    if (typeof e === "string" || !Number.isFinite(e.numerator) || !Number.isFinite(e.denominator) || e.numerator <= 0 || e.denominator <= 0) return unavailable("Ratio du split fournisseur indisponible : valorisation indisponible.");
+    events.push(e);
+  }
+  if (events.length !== relevant.length || relevant.some(s => !events.some(e => e.date === s.date && Math.abs(s.ratio - e.numerator / e.denominator) < 1e-9))) return unavailable("Date ou ratio du split fournisseur incompatible avec le grand livre : valorisation indisponible.");
+  for (const s of relevant) {
+    const pre = [...pts].reverse().find(p => p.date < s.date); const post = pts.find(p => p.date >= s.date);
+    if (!pre || !post || (day(s.date) - day(pre.date)) / 864e5 > MAX_CARRY_DAYS || (day(post.date) - day(s.date)) / 864e5 > MAX_CARRY_DAYS) return unavailable("Cours manquants autour du split : convention des cours non vérifiable, valorisation indisponible.");
+    if (Math.abs(Math.log(pre.close / post.close / s.ratio)) > 0.25 * Math.abs(Math.log(s.ratio))) return unavailable("Cours autour du split non cohérents avec des cours bruts : valorisation indisponible.");
+  }
+  return { points: pts, applied: [] as LedgerSplit[], available: true, reason: null };
 }
 
 export interface DayPoint { date: string; value: number | null; flow: number; missing: string[]; carried: string[]; cash: number }

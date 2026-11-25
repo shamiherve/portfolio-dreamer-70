@@ -23,12 +23,13 @@ describe("Embraer 1 → 4 : aucune échelle supposée", () => {
           const s = reconstruct(moves, prices, "2026-11-17");
           return { h, aligned, prices, selected: dates.map(d => s.cto.find(p => p.date === d)) };
         };
-        it(`${title} : sans preuve, valorisation indisponible et closes originales intactes`, () => {
+        it(`${title} : convention non déclarée, acceptée seulement si événement concordant et saut brut cohérent`, () => {
           const r = calculate("unknown");
           expect(r.h.priceConvention).toBe("unknown");
           expect(r.h.points.map(p => p.close)).toEqual(closes);
-          expect(r.aligned.available).toBe(false);
-          expect(r.selected.map(p => p?.value)).toEqual([null, null, null, null]);
+          const ok = providerDate === "2026-11-16" && convention === "raw";
+          expect(r.aligned.available).toBe(ok);
+          expect(r.selected.map(p => p?.value)).toEqual(ok ? [64, 64, close16 ? 64 : null, 64] : [null, null, null, null]);
         });
         it(`${title} : avec convention prouvée, valeur constante ou indisponible`, () => {
           const r = calculate(convention);

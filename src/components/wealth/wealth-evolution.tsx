@@ -91,6 +91,7 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
   useEffect(() => { if (events && moves.length) void load(); }, [requestKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const splits = useMemo(() => ledgerSplits(moves), [moves]);
+  const firstHeld = useMemo(() => { const q = new Map<string, number>(); const f = new Map<string, string>(); for (const m of moves) { if (!m.isin || !m.dq) continue; const k = `${m.account}|${m.isin}`; const v = (q.get(k) ?? 0) + m.dq; q.set(k, v); if (v > 1e-9 && !f.has(m.isin)) f.set(m.isin, m.date); } return f; }, [moves]);
   const { prices, priceIssues } = useMemo(() => {
     const map = new Map<string, PricePoint[]>();
     const priceIssues: string[] = [];
@@ -98,7 +99,7 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
     for (const c of data.checks) {
       const inst = instruments.find(i => i.key === c.key);
       if (!inst || !c.points.length) continue;
-      const aligned = alignSplits(c.points, inst.isin, splits, c.splitEvents ?? c.providerSplits ?? [], c.priceConvention ?? "unknown");
+      const aligned = alignSplits(c.points, inst.isin, splits, c.splitEvents ?? c.providerSplits ?? [], c.priceConvention ?? "unknown", firstHeld.get(inst.isin) ?? null);
       if (!aligned.available) { map.set(inst.isin, []); priceIssues.push(`${inst.name} : ${aligned.reason}`); continue; }
       let pts = toEur(aligned.points, inst.currency, data.fx[inst.currency]);
       // Euronext closes already recorded in the browser complete days Yahoo lacks; never override Yahoo.
@@ -109,7 +110,7 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
       map.set(inst.isin, pts);
     }
     return { prices: map, priceIssues };
-  }, [data, instruments, portfolio.quoteHistory, splits]);
+  }, [data, instruments, portfolio.quoteHistory, splits, firstHeld]);
   const names = useMemo(() => new Map(instruments.map(i => [i.isin, i.name])), [instruments]);
   const series = useMemo(() => data ? reconstruct(moves, prices, today(), names, splits) : null, [data, moves, prices, names, splits]);
   const start = series ? windowStart(period, series.global) : null;
