@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reconstruct, twrIndex, windowPerformance, upsertSnapshot, toEur, type Move } from "./performance";
+import { alignSplits, dayBreakdown, finalQuantities, ledgerSplits, reconstruct, twrIndex, windowPerformance, upsertSnapshot, toEur, type Move } from "./performance";
 import { parseHistory } from "./history-prices.functions";
 
 const mv = (date: string, account: "pea" | "cto", o: Partial<Move>): Move => ({ date, account, isin: null, dq: 0, cash: 0, external: 0, label: "", ...o });
@@ -36,12 +36,12 @@ describe("évolution du patrimoine", () => {
     expect(toEur([{ date: "2026-01-05", close: 110 }], "USD", [{ date: "2026-01-05", close: 1.1 }])[0]!.close).toBeCloseTo(100, 10);
     expect(toEur([{ date: "2026-01-05", close: 110 }], "USD", [])).toEqual([]);
   });
-  it("cours Yahoo dé-ajustés du split : 1 → 4 le 16/11/2026 appliqué une seule fois (par le grand livre)", () => {
+  it("préserve les closes Yahoo et les ratios sans deviner la convention du split", () => {
     const t1 = Date.parse("2026-11-13T15:00:00Z") / 1000, t2 = Date.parse("2026-11-17T15:00:00Z") / 1000, split = Date.parse("2026-11-16T14:30:00Z") / 1000;
     const h = parseHistory({ chart: { result: [{ meta: { symbol: "ERJ", currency: "USD", gmtoffset: 0 }, timestamp: [t1, t2], indicators: { quote: [{ close: [10, 10] }] }, events: { splits: { x: { date: split, numerator: 4, denominator: 1 } } } }] } });
-    expect(h.points.map(p => p.close)).toEqual([40, 10]);
-    const s = reconstruct([mv("2026-11-13", "cto", { isin: "E", dq: 1, cash: -40 }), mv("2026-11-16", "cto", { isin: "E", dq: 3 })], new Map([["E", [{ date: "2026-11-13", close: 40 }, { date: "2026-11-16", close: 10 }]]]), "2026-11-16");
-    expect(s.cto.map(p => p.value)).toEqual([0, 0, 0, 0]);
+    expect(h.points.map(p => p.close)).toEqual([10, 10]);
+    expect(h.priceConvention).toBe("unknown");
+    expect(h.splitEvents).toEqual([{ date: "2026-11-16", numerator: 4, denominator: 1 }]);
   });
   it("un seul instantané par date", () => {
     const base = { version: 1 as const, enabledAt: "2026-11-24T10:00:00.000Z", backupAt: "2026-11-24T10:00:00.000Z", items: [] };
@@ -49,5 +49,43 @@ describe("évolution du patrimoine", () => {
     const twice = upsertSnapshot(upsertSnapshot(base, snap), { ...snap, total: 2, at: "2026-11-24T18:00:00.000Z" });
     expect(twice.items).toHaveLength(1);
     expect(twice.items[0]!.total).toBe(2);
+  });
+});
+
+describe("garde-fous historiques du split Embraer", () => {
+  const isin = "US29082A1079";
+  const moves = [mv("2026-07-29", "cto", { isin, dq: 1, cash: 2, label: "buy" }), mv("2026-11-16", "cto", { isin, dq: 3, label: "split" })];
+  const points = [{ date: "2026-11-13", close: 64 }, { date: "2026-11-17", close: 16 }];
+  it("interdit le report du 13/11 sur quatre ADR le 16/11 dans le total et le détail", () => {
+    const prices = new Map([[isin, points]]);
+    const s = reconstruct(moves, prices, "2026-11-17");
+    expect(s.cto.find(p => p.date === "2026-11-13")?.value).toBe(66);
+    expect(s.cto.find(p => p.date === "2026-11-16")?.value).toBeNull();
+    expect(s.cto.find(p => p.date === "2026-11-17")?.value).toBe(66);
+    const b = dayBreakdown(moves, prices, "2026-11-16");
+    expect(b.lines.find(l => l.isin === isin)).toMatchObject({ quantity: 4, close: null, value: null, priceDate: null });
+    expect(b.cash.cto).toBe(2);
+    expect(finalQuantities(moves).get(`cto|${isin}`)).toBe(4);
+  });
+  it("garde le report après split si la clôture appartient au régime post-split", () => {
+    const s = reconstruct(moves, new Map([[isin, [{ date: "2026-11-16", close: 16 }]]]), "2026-11-17");
+    expect(s.cto.find(p => p.date === "2026-11-17")?.value).toBe(66);
+    expect(s.cto.find(p => p.date === "2026-11-17")?.carried).toEqual([isin]);
+  });
+  it("ne change ni les mouvements, ni les espèces, ni les objectifs des données d’entrée", () => {
+    const before = structuredClone(moves);
+    const prices = new Map([[isin, points]]);
+    const beforePoints = structuredClone(points);
+    reconstruct(moves, prices, "2026-11-17"); dayBreakdown(moves, prices, "2026-11-16");
+    alignSplits(points, isin, ledgerSplits(moves), [], "unknown");
+    expect(moves).toEqual(before); expect(points).toEqual(beforePoints);
+    expect(dayBreakdown(moves, prices, "2026-11-17").cash.cto).toBe(2);
+  });
+  it("la conversion BCE conserve son report habituel et ne fabrique pas un cours après split", () => {
+    const eur = toEur(points, "USD", [{ date: "2026-11-12", close: 1.25 }, { date: "2026-11-16", close: 1.25 }]);
+    expect(eur.map(p => p.close)).toEqual([51.2, 12.8]);
+    const s = reconstruct(moves, new Map([[isin, eur]]), "2026-11-17");
+    expect(s.cto.find(p => p.date === "2026-11-16")?.value).toBeNull();
+    expect(s.cto.find(p => p.date === "2026-11-17")?.value).toBe(53.2);
   });
 });

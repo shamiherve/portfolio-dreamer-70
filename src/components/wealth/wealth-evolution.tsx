@@ -91,13 +91,16 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
   useEffect(() => { if (events && moves.length) void load(); }, [requestKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const splits = useMemo(() => ledgerSplits(moves), [moves]);
-  const prices = useMemo(() => {
+  const { prices, priceIssues } = useMemo(() => {
     const map = new Map<string, PricePoint[]>();
-    if (!data) return map;
+    const priceIssues: string[] = [];
+    if (!data) return { prices: map, priceIssues };
     for (const c of data.checks) {
       const inst = instruments.find(i => i.key === c.key);
       if (!inst || !c.points.length) continue;
-      let pts = toEur(alignSplits(c.points, inst.isin, splits, c.providerSplits ?? []).points, inst.currency, data.fx[inst.currency]);
+      const aligned = alignSplits(c.points, inst.isin, splits, c.splitEvents ?? c.providerSplits ?? [], c.priceConvention ?? "unknown");
+      if (!aligned.available) { map.set(inst.isin, []); priceIssues.push(`${inst.name} : ${aligned.reason}`); continue; }
+      let pts = toEur(aligned.points, inst.currency, data.fx[inst.currency]);
       // Euronext closes already recorded in the browser complete days Yahoo lacks; never override Yahoo.
       if (inst.currency === "EUR") {
         const extra = (portfolio.quoteHistory ?? []).filter(q => q.isin === inst.isin).map(q => ({ date: q.tradeTimestamp.slice(0, 10), close: q.price })).filter(q => !pts.some(p => p.date === q.date));
@@ -105,10 +108,10 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
       }
       map.set(inst.isin, pts);
     }
-    return map;
+    return { prices: map, priceIssues };
   }, [data, instruments, portfolio.quoteHistory, splits]);
   const names = useMemo(() => new Map(instruments.map(i => [i.isin, i.name])), [instruments]);
-  const series = useMemo(() => data ? reconstruct(moves, prices, today(), names) : null, [data, moves, prices, names]);
+  const series = useMemo(() => data ? reconstruct(moves, prices, today(), names, splits) : null, [data, moves, prices, names, splits]);
   const start = series ? windowStart(period, series.global) : null;
   const perf = useMemo(() => series && start ? { global: windowPerformance(series.global, start), pea: windowPerformance(series.pea, start), cto: windowPerformance(series.cto, start) } : null, [series, start]);
   const allPerf = useMemo(() => series ? { global: windowPerformance(series.global, series.global[0]!.date), pea: windowPerformance(series.pea, series.pea[0]!.date), cto: windowPerformance(series.cto, series.cto[0]!.date) } : null, [series]);
@@ -225,7 +228,7 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
     {series && <>
       <div className="grid gap-3 text-sm sm:grid-cols-3">{SERIES.filter(s => shown.includes(s.id)).map(s => { const x = summary(s.id); return <div key={s.id} className="rounded-md border border-border p-3">
         <p className="text-xs text-muted-foreground">{s.label}</p>
-        <p className="text-lg font-semibold tabular-nums">{x?.value === null || x?.value === undefined ? "Incomplet" : eur(x.value)}</p>
+        <p className="text-lg font-semibold tabular-nums">{x?.value === null || x?.value === undefined ? "Valorisation indisponible" : eur(x.value)}</p>
         <p className="tabular-nums text-muted-foreground">Performance période (TWR) : {pct(x?.perf ?? null)}</p></div>; })}</div>
 
       <p className="text-xs text-muted-foreground">Début : {fr(start)} · Dernière donnée : {fr(last?.date ?? null)} · Dernière clôture non reportée : {fr(lastFresh?.date ?? null)} · Cours récupérés le {data ? new Date(data.at).toLocaleString("fr-FR") : "—"}</p>
@@ -259,15 +262,16 @@ export function WealthEvolution({ portfolio, wealth }: { portfolio: Portfolio; w
       <p className="text-xs text-muted-foreground">Méthode : valeur = quantités × clôtures converties en euros (taux BCE) + espèces nettes. Performance pondérée par le temps : versements et retraits neutralisés ; dividendes, frais et taxes inclus. Global calculé sur PEA + CTO cumulés, jamais par moyenne. Solde initial : débute au premier mouvement documenté ({fr(moves[0]?.date ?? null)}) ; avant cette date, aucune donnée.</p>
     </>}
 
-    {(missingNames.length > 0 || issues.length > 0 || qtyIssues.length > 0 || (data?.fxIssues.length ?? 0) > 0) && <div role="alert" className="space-y-1 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm">
+    {(missingNames.length > 0 || issues.length > 0 || priceIssues.length > 0 || qtyIssues.length > 0 || (data?.fxIssues.length ?? 0) > 0) && <div role="alert" className="space-y-1 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm">
       <p className="flex items-center gap-2 font-medium"><AlertTriangle className="size-4" />Données insuffisantes ou à vérifier</p>
       {missingNames.length > 0 && <p>{incomplete.length} jour(s) incomplet(s) sur la période, du {fr(incomplete[0]!.date)} au {fr(incomplete.at(-1)!.date)} — cours manquants : {missingNames.join(", ")}.</p>}
       {data?.fxIssues.map(i => <p key={i}>{i}</p>)}
       {issues.map(i => <p key={i}>{i}</p>)}
+      {priceIssues.map(i => <p key={i}>{i}</p>)}
       {qtyIssues.length > 0 && <p>Quantités reconstituées différentes des positions enregistrées (aucune correction appliquée) : {qtyIssues.join(" ; ")}</p>}
     </div>}
 
-    {series && last && (() => { const b = dayBreakdown(moves, prices, last.date); return <details className="text-sm"><summary className="cursor-pointer font-medium">Détail du calcul au {fr(last.date)}</summary>
+    {series && last && (() => { const b = dayBreakdown(moves, prices, last.date, splits); return <details className="text-sm"><summary className="cursor-pointer font-medium">Détail du calcul au {fr(last.date)}</summary>
       <div className="mt-2 overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-muted-foreground"><tr><th className="p-1">Compte</th><th className="p-1">Instrument</th><th className="p-1 text-right">Quantité reconstituée</th><th className="p-1 text-right">Clôture (€)</th><th className="p-1">Date du cours</th><th className="p-1 text-right">Valeur</th></tr></thead>
         <tbody>{(["pea", "cto"] as const).flatMap(a => [...b.lines.filter(l => l.account === a).map(l => <tr key={`${a}${l.isin}`} className="border-t border-border"><td className="p-1">{a.toUpperCase()}</td><td className="p-1">{names.get(l.isin) ?? l.isin}</td><td className="p-1 text-right tabular-nums">{l.quantity}</td><td className="p-1 text-right tabular-nums">{l.close === null ? "manquant" : l.close.toFixed(2)}</td><td className="p-1">{fr(l.priceDate)}</td><td className="p-1 text-right tabular-nums">{l.value === null ? "—" : eur(l.value)}</td></tr>),
           <tr key={`${a}cash`} className="border-t border-border"><td className="p-1">{a.toUpperCase()}</td><td className="p-1">Espèces nettes reconstituées</td><td /><td /><td /><td className="p-1 text-right tabular-nums">{eur(b.cash[a])}</td></tr>,

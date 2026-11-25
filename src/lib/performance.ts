@@ -58,30 +58,42 @@ export function ledgerSplits(moves: Move[]): LedgerSplit[] {
   }
   return out;
 }
-/** Window (days) within which a provider-reported split is considered the same as the ledger split. */
-export const SPLIT_MATCH_DAYS = 10;
-/** Option A (validated 25/11/2026): when the provider does not report a ledger split, closes from the split date are
- * still pre-split per-unit prices; divide them by the ratio so value is continuous. Never applied twice. */
-export function alignSplits(points: PricePoint[], isin: string, splits: LedgerSplit[], providerSplits: string[]) {
-  const todo = splits.filter(s => s.isin === isin && Math.abs(s.ratio - 1) > 1e-9 && !providerSplits.some(d => Math.abs(day(d) - day(s.date)) / 864e5 <= SPLIT_MATCH_DAYS));
-  if (!todo.length) return { points, applied: [] as LedgerSplit[] };
-  return { applied: todo, points: points.map(p => { const f = todo.filter(s => p.date >= s.date).reduce((a, s) => a * s.ratio, 1); return f === 1 ? p : { date: p.date, close: p.close / f }; }) };
+export type PriceConvention = "raw" | "split-adjusted" | "unknown";
+export interface ProviderSplit { date: string; numerator: number; denominator: number }
+/** Never infer an adjustment convention or event identity from price levels or nearby dates.
+ * Unknown split series are unavailable; trusted adjusted series are normalised once to ledger units. */
+export function alignSplits(points: PricePoint[], isin: string, splits: LedgerSplit[], providerSplits: readonly (ProviderSplit | string)[], convention: PriceConvention = "unknown") {
+  const relevant = splits.filter(s => s.isin === isin && Math.abs(s.ratio - 1) > 1e-9);
+  const unavailable = (reason: string) => ({ points: [] as PricePoint[], applied: [] as LedgerSplit[], available: false, reason });
+  if (!relevant.length && !providerSplits.length) return { points, applied: [] as LedgerSplit[], available: true, reason: null };
+  if (convention === "unknown") return unavailable("Convention des cours autour du split non établie : valorisation indisponible.");
+  if (relevant.some(s => !Number.isFinite(s.ratio) || s.ratio <= 0) || new Set(relevant.map(s => s.date)).size !== relevant.length) return unavailable("Splits du grand livre ambigus : valorisation indisponible.");
+  const events: ProviderSplit[] = [];
+  for (const event of providerSplits) {
+    if (typeof event === "string" || !Number.isFinite(event.numerator) || !Number.isFinite(event.denominator) || event.numerator <= 0 || event.denominator <= 0) return unavailable("Ratio du split fournisseur indisponible : valorisation indisponible.");
+    if (!relevant.some(s => s.date === event.date && Math.abs(s.ratio - event.numerator / event.denominator) < 1e-9)) return unavailable("Date ou ratio du split fournisseur incompatible avec le grand livre : valorisation indisponible.");
+    events.push(event);
+  }
+  if (convention === "raw") return { points, applied: [] as LedgerSplit[], available: true, reason: null };
+  if (events.length !== relevant.length || relevant.some(s => !events.some(e => e.date === s.date && Math.abs(s.ratio - e.numerator / e.denominator) < 1e-9))) return unavailable("Correspondance des splits ajustés non établie : valorisation indisponible.");
+  return { available: true, reason: null, applied: relevant, points: points.map(p => ({ date: p.date, close: p.close * relevant.filter(s => p.date < s.date).reduce((f, s) => f * s.ratio, 1) })) };
 }
 
 export interface DayPoint { date: string; value: number | null; flow: number; missing: string[]; carried: string[]; cash: number }
 export type Series = Record<AccountId | "global", DayPoint[]>;
 
-function priceAt(points: PricePoint[] | undefined, date: string) {
+function priceAt(points: PricePoint[] | undefined, date: string, splitDates: readonly string[] = []) {
   if (!points) return null;
   let lo = 0, hi = points.length - 1, best = -1;
-  while (lo <= hi) { const mid = (lo + hi) >> 1; if (points[mid]!.date <= date) { best = mid; lo = mid + 1; } else hi = mid - 1; }
-  const p = best >= 0 ? points[best]! : null;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; const candidate = points[mid]; if (!candidate) return null; if (candidate.date <= date) { best = mid; lo = mid + 1; } else hi = mid - 1; }
+  const p = best >= 0 ? points[best] : undefined;
   if (!p || (day(date) - day(p.date)) / 864e5 > MAX_CARRY_DAYS) return null;
+  if (splitDates.some(s => p.date < s && s <= date)) return null;
   return { close: p.close, carried: p.date !== date };
 }
 
 /** Daily value = Σ quantity × EUR close + cash. Missing prices make the day null — never interpolated. */
-export function reconstruct(moves: Move[], prices: Map<string, PricePoint[]>, to: string, names: Map<string, string> = new Map()): Series {
+export function reconstruct(moves: Move[], prices: Map<string, PricePoint[]>, to: string, names: Map<string, string> = new Map(), splits: LedgerSplit[] = ledgerSplits(moves)): Series {
   const out: Series = { pea: [], cto: [], global: [] };
   if (!moves.length) return out;
   const from = moves[0]!.date;
@@ -99,7 +111,7 @@ export function reconstruct(moves: Move[], prices: Map<string, PricePoint[]>, to
       for (const [k, q] of qty) {
         const [acc, isin] = k.split("|") as [string, string];
         if (acc !== a || Math.abs(q) < 1e-9) continue;
-        const p = priceAt(prices.get(isin), d);
+        const p = priceAt(prices.get(isin), d, splits.filter(s => s.isin === isin).map(s => s.date));
         if (!p) { missing.push(names.get(isin) ?? isin); continue; }
         if (p.carried) carried.push(names.get(isin) ?? isin);
         v += q * p.close;
@@ -180,7 +192,7 @@ export const CONFIRMED_HISTORY_SYMBOLS: Record<string, string> = { FR0011550193:
 
 export interface BreakdownLine { account: AccountId; isin: string; quantity: number; close: number | null; priceDate: string | null; value: number | null }
 /** Read-only detail of one day: reconstructed quantities × EUR close, plus net cash per account. */
-export function dayBreakdown(moves: Move[], prices: Map<string, PricePoint[]>, date: string) {
+export function dayBreakdown(moves: Move[], prices: Map<string, PricePoint[]>, date: string, splits: LedgerSplit[] = ledgerSplits(moves)) {
   const qty = new Map<string, number>(); const cash = { pea: 0, cto: 0 };
   for (const m of moves) {
     if (m.date > date) break;
@@ -191,7 +203,7 @@ export function dayBreakdown(moves: Move[], prices: Map<string, PricePoint[]>, d
   for (const [k, q] of qty) {
     if (Math.abs(q) < 1e-9) continue;
     const [account, isin] = k.split("|") as [AccountId, string];
-    const pts = prices.get(isin); const p = priceAt(pts, date);
+    const pts = prices.get(isin); const p = priceAt(pts, date, splits.filter(s => s.isin === isin).map(s => s.date));
     let priceDate: string | null = null;
     if (p && pts) priceDate = [...pts].reverse().find(x => x.date <= date)?.date ?? null;
     lines.push({ account, isin, quantity: q, close: p?.close ?? null, priceDate, value: p ? Math.round(q * p.close * 100) / 100 : null });

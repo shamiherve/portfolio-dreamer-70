@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import type { PriceConvention, ProviderSplit } from "./performance";
 
 /** Read-only historical closes (Yahoo) and ECB FX. Never substitutes another listing. */
 const UA = { "User-Agent": "Mozilla/5.0 (equilibre personal portfolio)", Accept: "application/json,text/csv" };
@@ -17,11 +18,11 @@ async function get(url: string) {
   }
   throw new Error("Fournisseur indisponible");
 }
-export interface HistoryCheck { key: string; isin: string; symbol: string | null; exchange: string | null; currency: string | null; points: { date: string; close: number }[]; first: string | null; issues: string[]; providerSplits?: string[] }
+export interface HistoryCheck { key: string; isin: string; symbol: string | null; exchange: string | null; currency: string | null; points: { date: string; close: number }[]; first: string | null; issues: string[]; providerSplits?: string[]; splitEvents?: ProviderSplit[]; priceConvention?: PriceConvention }
 
 type ChartJson = { chart?: { result?: { meta?: { symbol?: string; currency?: string; exchangeName?: string; gmtoffset?: number }; timestamp?: number[]; indicators?: { quote?: { close?: (number | null)[] }[] }; events?: { splits?: Record<string, { date: number; numerator: number; denominator: number }> } }[] } };
 
-/** Yahoo closes are split-adjusted: undo it so they match the raw ledger quantities (splits are applied by the ledger). */
+/** Preserve Yahoo closes verbatim. A split event does not establish their adjustment convention. */
 export function parseHistory(j: ChartJson) {
   const r = j.chart?.result?.[0]; const meta = r?.meta;
   if (!r || !meta) throw new Error("Historique introuvable");
@@ -29,12 +30,12 @@ export function parseHistory(j: ChartJson) {
   const splits = Object.values(r.events?.splits ?? {});
   const points = (r.timestamp ?? []).flatMap((t, i) => {
     const c = closes[i]; if (typeof c !== "number" || !Number.isFinite(c) || c <= 0) return [];
-    const factor = splits.filter(s => t < s.date).reduce((f, s) => f * (s.numerator / s.denominator), 1);
-    return [{ date: new Date((t + off) * 1000).toISOString().slice(0, 10), close: c * factor }];
+    return [{ date: new Date((t + off) * 1000).toISOString().slice(0, 10), close: c }];
   });
   const dedup = new Map(points.map(p => [p.date, p]));
-  const providerSplits = splits.map(sp => new Date((sp.date + off) * 1000).toISOString().slice(0, 10)).sort();
-  return { providerSplits, symbol: meta.symbol ?? "", currency: meta.currency ?? "", exchange: meta.exchangeName ?? "", points: [...dedup.values()].sort((a, b) => a.date.localeCompare(b.date)) };
+  const splitEvents = splits.map(sp => ({ date: new Date((sp.date + off) * 1000).toISOString().slice(0, 10), numerator: sp.numerator, denominator: sp.denominator })).sort((a, b) => a.date.localeCompare(b.date));
+  const providerSplits = splitEvents.map(sp => sp.date);
+  return { providerSplits, splitEvents, priceConvention: "unknown" as const, symbol: meta.symbol ?? "", currency: meta.currency ?? "", exchange: meta.exchangeName ?? "", points: [...dedup.values()].sort((a, b) => a.date.localeCompare(b.date)) };
 }
 
 const item = z.object({ key: z.string().max(80), isin: z.string().regex(/^[A-Z]{2}[A-Z0-9]{9}\d$/), symbol: z.string().regex(/^[A-Za-z0-9.^=-]{1,20}$/).nullable(), currency: z.string().regex(/^[A-Z]{3}$/) });
@@ -57,7 +58,7 @@ export const fetchHistory = createServerFn({ method: "POST" })
         c.exchange = h.exchange; c.currency = h.currency;
         if (h.symbol.toUpperCase() !== c.symbol.toUpperCase()) c.issues.push("Le symbole renvoyé ne correspond pas au symbole demandé.");
         else if (h.currency !== it.currency) c.issues.push(`Devise de cotation ${h.currency} différente de la devise attendue ${it.currency}.`);
-        else { c.points = h.points; c.providerSplits = h.providerSplits ?? []; c.first = h.points[0]?.date ?? null; if (!h.points.length) c.issues.push("Aucun cours historique disponible."); }
+        else { c.points = h.points; c.providerSplits = h.providerSplits ?? []; c.splitEvents = h.splitEvents; c.priceConvention = h.priceConvention; c.first = h.points[0]?.date ?? null; if (!h.points.length) c.issues.push("Aucun cours historique disponible."); }
       } catch (e) { c.issues.push(e instanceof Error ? e.message : "Historique indisponible"); }
       checks.push(c);
     }
